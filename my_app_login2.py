@@ -3,7 +3,6 @@ import streamlit_authenticator as stauth
 import requests
 import json
 import yaml # 設定保存用
-from dotenv import load_dotenv
 
 # --- 1. ユーザー情報の設定 ---
 names = ["田中 太郎", "佐藤 花子"]
@@ -67,8 +66,7 @@ elif st.session_state["authentication_status"]:
             full_response = ""
 
             # API設定
-            load_dotenv()
-            API_KEY = os.getenv("DIFY_API_KEY")
+            API_KEY = st.secrets("DIFY_API_KEY")
             BASE_URL = "https://api.dify.ai/v1/chat-messages"
             headers = {
                 "Authorization": f"Bearer {API_KEY}".strip(),
