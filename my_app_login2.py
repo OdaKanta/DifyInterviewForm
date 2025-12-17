@@ -106,9 +106,12 @@ if st.session_state["authentication_status"]:
                 # 現在の時刻
                 now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S')
                 
-                # スプレッドシートの既存データを読み込む
-                # spreadsheet_urlはSecretsに設定したものを使用
-                existing_data = conn.read(spreadsheet=st.secrets["spreadsheet_url"], usecols=[0,1,2,3,4])
+                # 【重要】ttl=0 を追加してキャッシュを無効化し、常に最新のスプレッドシートを読み込む
+                # また、空の行を読み込まないように引数を調整
+                existing_data = conn.read(
+                    spreadsheet=st.secrets["spreadsheet_url"], 
+                    ttl=0  # キャッシュを0秒にする（毎回新しく読み込む）
+                )
                 
                 # 新しい行を作成
                 new_row = {
@@ -119,9 +122,17 @@ if st.session_state["authentication_status"]:
                     "conversation_id": st.session_state.conversation_id
                 }
                 
-                # データを追記して更新
+                # データを追記
                 import pandas as pd
-                updated_df = pd.concat([existing_data, pd.DataFrame([new_row])], ignore_index=True)
+                new_row_df = pd.DataFrame([new_row])
+                
+                # 既存データが空の場合でも動くように処理
+                if existing_data.empty:
+                    updated_df = new_row_df
+                else:
+                    updated_df = pd.concat([existing_data, new_row_df], ignore_index=True)
+                
+                # スプレッドシートを更新
                 conn.update(spreadsheet=st.secrets["spreadsheet_url"], data=updated_df)
                 
             except Exception as e:
