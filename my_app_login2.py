@@ -2,6 +2,9 @@ import streamlit as st
 import streamlit_authenticator as stauth
 import requests
 import json
+from openai import OpenAI
+from streamlit_mic_recorder import mic_recorder
+import io
 import yaml # 設定保存用
 
 # --- 1. ユーザー情報の設定 ---
@@ -23,84 +26,97 @@ authenticator = stauth.Authenticate(
 # --- 2. ログイン画面の表示 ---
 authenticator.login('main')
 
-# ログイン状態のチェック
-if st.session_state["authentication_status"] == False:
-    st.error('ユーザー名またはパスワードが間違っています')
-elif st.session_state["authentication_status"] == None:
-    st.warning('ユーザー名とパスワードを入力してください')
-elif st.session_state["authentication_status"]:
-    # ログイン成功時の情報を取得
+if st.session_state["authentication_status"]:
     username = st.session_state["username"]
     name = st.session_state["name"]
 
-    # --- 3. ログイン成功後のメインコンテンツ ---
+    # OpenAIクライアントの初期化 (Secretsに設定したキーを使用)
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+
     with st.sidebar:
         st.write(f"ようこそ、{name} さん")
         authenticator.logout('ログアウト', 'sidebar')
-        
-        # デバッグ用：現在の会話IDを表示（不要なら消してもOK）
-        if "conversation_id" in st.session_state:
-            st.caption(f"Conversation ID: {st.session_state.conversation_id}")
 
-    st.title("認証済みチャットアプリ")
+    st.title("音声対応AIアシスタント")
 
-    # 会話履歴と会話IDの初期化
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "conversation_id" not in st.session_state:
-        st.session_state.conversation_id = "" # 最初は空っぽ
+        st.session_state.conversation_id = ""
+
+    # --- 音声入力セクション ---
+    st.write("マイクを押して話しかけてください：")
+    audio = mic_recorder(start_prompt="⏺️ 録音開始", stop_prompt="⏹️ 停止", key='recorder')
+
+    user_input = None
+
+    # 音声が録音されたら Whisper でテキスト化
+    if audio:
+        audio_bio = io.BytesIO(audio['bytes'])
+        audio_bio.name = "audio.wav"
+        
+        with st.spinner('音声を解析中...'):
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1", 
+                file=audio_bio
+            )
+            user_input = transcript.text
+            st.success(f"聞き取り結果: {user_input}")
+
+    # 通常のテキスト入力も受け付ける
+    chat_input = st.chat_input("またはメッセージを入力...")
+    if chat_input:
+        user_input = chat_input
 
     # 過去のメッセージを表示
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # ユーザーが入力した時の処理
-    if prompt := st.chat_input("メッセージを入力..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
+    # --- メイン処理 (Dify送信 & 音声合成) ---
+    if user_input:
+        st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"):
-            st.markdown(prompt)
+            st.markdown(user_input)
 
         with st.chat_message("assistant"):
             response_placeholder = st.empty()
             full_response = ""
 
-            # API設定
-            API_KEY = st.secrets["DIFY_API_KEY"]
-            BASE_URL = "https://api.dify.ai/v1/chat-messages"
-            headers = {
-                "Authorization": f"Bearer {API_KEY}".strip(),
-                "Content-Type": "application/json"
-            }
-
-            # 送信データ（会話IDを含める）
+            # Dify API設定
+            DIFY_KEY = st.secrets["DIFY_API_KEY"]
+            headers = {"Authorization": f"Bearer {DIFY_KEY}", "Content-Type": "application/json"}
             data = {
                 "inputs": {},
-                "query": prompt,
+                "query": user_input,
                 "response_mode": "streaming",
                 "user": username,
-                "conversation_id": st.session_state.conversation_id # 保存されているIDを送信
+                "conversation_id": st.session_state.conversation_id
             }
 
-            # Dify APIへのリクエスト
-            response = requests.post(BASE_URL, headers=headers, json=data, stream=True)
+            response = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=data, stream=True)
 
-            # ストリーミング処理
             for line in response.iter_lines():
                 if line:
                     decoded_line = line.decode('utf-8')
                     if decoded_line.startswith('data: '):
-                        # data: 以降のJSON部分を取り出す
                         chunk = json.loads(decoded_line[6:])
-                        
-                        # Difyから新しい会話IDが届いたら保存する
                         if "conversation_id" in chunk:
                             st.session_state.conversation_id = chunk["conversation_id"]
-                        
-                        # 回答の一部があれば表示
                         if "answer" in chunk:
                             full_response += chunk["answer"]
                             response_placeholder.markdown(full_response + "▌")
 
             response_placeholder.markdown(full_response)
             st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+            # --- 音声出力 (OpenAI TTS) ---
+            with st.spinner('音声を生成中...'):
+                tts_response = client.audio.speech.create(
+                    model="tts-1",
+                    voice="alloy", # 声の種類: alloy, echo, fable, onyx, nova, shimmer
+                    input=full_response
+                )
+                # 音声データを再生
+                audio_data = io.BytesIO(tts_response.content)
+                st.audio(audio_data, format="audio/mp3", autoplay=True)
