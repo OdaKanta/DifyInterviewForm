@@ -66,7 +66,7 @@ elif st.session_state["authentication_status"]:
             full_response = ""
 
             # API設定
-            API_KEY = st.secrets("DIFY_API_KEY")
+            API_KEY = st.secrets["DIFY_API_KEY"]
             BASE_URL = "https://api.dify.ai/v1/chat-messages"
             headers = {
                 "Authorization": f"Bearer {API_KEY}".strip(),
