@@ -2,4 +2,3 @@ streamlit
 streamlit-authenticator
 requests
 pyyaml
-dotenv
