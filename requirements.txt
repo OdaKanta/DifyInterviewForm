@@ -2,3 +2,5 @@ streamlit
 streamlit-authenticator
 requests
 pyyaml
+openai
+streamlit-mic-recorder
