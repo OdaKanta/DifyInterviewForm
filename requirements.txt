@@ -4,3 +4,4 @@ requests
 pyyaml
 openai
 streamlit-mic-recorder
+st-gsheets-connection
