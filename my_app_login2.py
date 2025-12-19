@@ -50,13 +50,22 @@ if st.session_state["authentication_status"]:
             DIFY_KEY = st.secrets["DIFY_API_KEY"]
             headers = {"Authorization": f"Bearer {DIFY_KEY}", "Content-Type": "application/json"}
             
-            # 最初の挨拶を取得するために「inputs」は空、
-            # queryには「(開始)」などのダミーを入れるか、Dify側で設定されていれば空でも動きます
+            # ★修正：入力フィールドにファイルを指定する場合の書き方
+            # "変数名" は Dify の入力フィールドで設定した名前に書き換えてください
+            inputs_data = {
+                "your_file_variable_name": {
+                    "transfer_method": "local_file", # ローカルファイル参照
+                    "upload_file_id": "ee477849-b192-4035-a6b7-aae8b111a328", # 例: "bf...-..."
+                    "type": "document" # または image
+                }
+            }
+
             data = {
-                "inputs": {},
-                "query": "こんにちは", # Dify側で会話を開始させるためのトリガー
+                "inputs": inputs_data,  # ★空だった {} から inputs_data に変更
+                "query": user_input if user_input else "こんにちは",
                 "response_mode": "streaming",
-                "user": username
+                "user": username,
+                "conversation_id": st.session_state.conversation_id
             }
 
             response = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=data, stream=True)
