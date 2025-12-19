@@ -140,6 +140,17 @@ if st.session_state["authentication_status"]:
                 st.error(f"ログ保存エラー: {e}")
 
             # --- 音声出力 (OpenAI TTS) ---
-            with st.spinner('音声を生成中...'):
-                tts_response = client.audio.speech.create(model="tts-1", voice="alloy", input=full_response)
-                st.audio(io.BytesIO(tts_response.content), format="audio/mp3", autoplay=True)
+            # full_response が空（""）でないか、また文字数が少なすぎないか確認
+            if full_response.strip(): 
+                with st.spinner('音声を生成中...'):
+                    try:
+                        tts_response = client.audio.speech.create(
+                            model="tts-1", 
+                            voice="alloy", 
+                            input=full_response
+                        )
+                        st.audio(io.BytesIO(tts_response.content), format="audio/mp3", autoplay=True)
+                    except Exception as e:
+                        st.error(f"音声生成エラー: {e}")
+            else:
+                st.warning("AIからの回答が空だったため、音声は生成されませんでした。")
