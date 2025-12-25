@@ -13,7 +13,7 @@ import pandas as pd
 # --- 1. ユーザー情報の設定 ---
 names = ["田中 太郎", "佐藤 花子", "工大 太郎", "工大 花子"]
 usernames = ["tanaka", "sato", "kodai", "hanako"]
-passwords = ["pass123", "pass456", "password"]
+passwords = ["pass123", "pass456", "password", "password"]
 
 authenticator = stauth.Authenticate(
     {'usernames': {
