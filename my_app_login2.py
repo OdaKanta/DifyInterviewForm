@@ -8,7 +8,7 @@ import io
 import yaml # 設定保存用
 from streamlit_gsheets import GSheetsConnection
 import datetime
-
+user_input = None
 # --- 1. ユーザー情報の設定 ---
 names = ["田中 太郎", "佐藤 花子", "工大 太郎"]
 usernames = ["tanaka", "sato", "kodai"]
