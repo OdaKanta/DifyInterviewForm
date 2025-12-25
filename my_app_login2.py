@@ -225,14 +225,16 @@ if st.session_state["authentication_status"]:
             st.error(f"ログ保存エラー: {e}")
 
         # --- 音声出力 ---
-        with st.spinner('音声を生成中...'):
-            tts_response = client.audio.speech.create(
-                model="tts-1",
-                voice="alloy",
-                input=full_response
-            )
-            st.audio(
-                io.BytesIO(tts_response.content),
-                format="audio/mp3",
-                autoplay=True
-            )
+        if full_response.strip():  # ★空文字防止
+            with st.spinner('音声を生成中...'):
+                tts_response = client.audio.speech.create(
+                    model="tts-1",
+                    voice="alloy",
+                    input=full_response
+                )
+                st.audio(
+                    io.BytesIO(tts_response.content),
+                    format="audio/mp3",
+                    autoplay=True
+                )
+
