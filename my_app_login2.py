@@ -18,7 +18,7 @@ import datetime
 
 import pandas as pd
 
-
+user_input = None
 
 # --- 1. ユーザー情報の設定 ---
 
