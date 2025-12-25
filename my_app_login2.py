@@ -14,7 +14,7 @@ import pandas as pd
 # ==========================================
 # Difyの入力フィールド（変数名）とファイルID
 FILE_VARIABLE_NAME = "material" # Difyで設定した変数名
-UPLOAD_FILE_ID = "ee477849-b192-4035-a6b7-aae8b111a328" # Difyにアップ済みのファイルID
+UPLOAD_FILE_ID = "18afae38-1174-4f49-adda-020f12f4c0a7" # Difyにアップ済みのファイルID
 # ==========================================
 
 # --- 1. ユーザー情報の設定 ---
