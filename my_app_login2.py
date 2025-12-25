@@ -43,7 +43,7 @@ if st.session_state["authentication_status"]:
         st.write(f"ようこそ、{name} さん")
         authenticator.logout('ログアウト', 'sidebar')
 
-    st.title("音声対応AIアシスタント (ログ収集付) 10")
+    st.title("音声対応AIアシスタント (ログ収集付) 20")
 
     # セッション状態の初期化
     if "messages" not in st.session_state:
