@@ -48,31 +48,31 @@ if st.session_state["authentication_status"]:
     DIFY_KEY = st.secrets["DIFY_API_KEY"]
     headers = {"Authorization": f"Bearer {DIFY_KEY}", "Content-Type": "application/json"}
 
-    # --- 初回ログイン時の処理 ---
+    # --- 初回: Difyから「開始メッセージ」を取得 ---
     if st.session_state.first_run:
         try:
             params_res = requests.get("https://api.dify.ai/v1/parameters", headers=headers, params={"user": username})
             params_res.raise_for_status()
-            params_data = params_res.json()
-            opening_statement = params_data.get("opening_statement", "こんにちは！")
+            opening_statement = params_res.json().get("opening_statement", "こんにちは！")
             
+            # メッセージを保存
             st.session_state.messages.append({"role": "assistant", "content": opening_statement})
             
-            # 初回音声の生成と保存
+            # 音声を生成して保存
             tts_init = client.audio.speech.create(model="tts-1", voice="alloy", input=opening_statement)
             st.session_state.initial_audio = tts_init.content
         except Exception as e:
-            st.error(f"初期設定取得エラー: {e}")
+            st.error(f"初期取得エラー: {e}")
         
         st.session_state.first_run = False
         st.rerun()
 
-    # 初回音声再生
+    # 初回音声の再生
     if "initial_audio" in st.session_state:
         st.audio(io.BytesIO(st.session_state.initial_audio), format="audio/mp3", autoplay=True)
         del st.session_state.initial_audio
 
-    # --- 履歴の描画 (ここが常に最新の状態を映す) ---
+    # --- 履歴の表示 (常に最新を表示) ---
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
@@ -93,12 +93,12 @@ if st.session_state["authentication_status"]:
 
     # --- メインチャット処理 ---
     if user_input:
-        # 1. ユーザー入力を表示して保存
+        # 1. ユーザー発言を即座に保存・表示
+        st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"):
             st.markdown(user_input)
-        st.session_state.messages.append({"role": "user", "content": user_input})
 
-        # 2. AIの応答を生成
+        # 2. ボットの応答をリアルタイム表示しながら取得
         with st.chat_message("assistant"):
             response_placeholder = st.empty()
             full_response = ""
@@ -107,42 +107,41 @@ if st.session_state["authentication_status"]:
                 "inputs": {}, "query": user_input, "response_mode": "streaming",
                 "user": username, "conversation_id": st.session_state.conversation_id
             }
-            response = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=data, stream=True)
-
-            for line in response.iter_lines():
-                if line:
-                    decoded_line = line.decode('utf-8')
-                    if decoded_line.startswith('data: '):
-                        chunk = json.loads(decoded_line[6:])
-                        if "conversation_id" in chunk:
-                            st.session_state.conversation_id = chunk["conversation_id"]
-                        if "answer" in chunk:
-                            full_response += chunk["answer"]
-                            response_placeholder.markdown(full_response + "▌")
+            # stream=True で逐次取得
+            with requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=data, stream=True) as response:
+                for line in response.iter_lines():
+                    if line:
+                        decoded_line = line.decode('utf-8')
+                        if decoded_line.startswith('data: '):
+                            chunk = json.loads(decoded_line[6:])
+                            if "conversation_id" in chunk:
+                                st.session_state.conversation_id = chunk["conversation_id"]
+                            if "answer" in chunk:
+                                full_response += chunk["answer"]
+                                response_placeholder.markdown(full_response + "▌")
             
             response_placeholder.markdown(full_response)
         
-        # 3. AIの回答を保存
+        # 3. ボットの応答をセッションに保存
         st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-        # 4. 音声生成・再生とログ保存を「画面更新前」に行う
+        # 4. 音声生成・再生 (画面更新前に行う)
         if full_response:
-            # 音声
             tts_res = client.audio.speech.create(model="tts-1", voice="alloy", input=full_response)
             st.audio(io.BytesIO(tts_res.content), format="audio/mp3", autoplay=True)
             
-            # ログ
+            # 5. スプレッドシートへログ保存
             try:
                 now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S')
                 existing_data = conn.read(spreadsheet=st.secrets["spreadsheet_url"], ttl=0)
                 new_row = pd.DataFrame([{"date": now, "user_id": username, "user_input": user_input, "ai_response": full_response, "conversation_id": st.session_state.conversation_id}])
                 updated_df = pd.concat([existing_data, new_row], ignore_index=True)
                 conn.update(spreadsheet=st.secrets["spreadsheet_url"], data=updated_df)
-            except Exception as e:
-                pass # ログ失敗で対話を止めない
+            except:
+                pass
 
-        # 5. 最後に一度だけ再描画（これで全ての履歴が固定される）
+        # 6. 【重要】スクリプトを再実行して履歴描画ループを最新にする
         st.rerun()
 
 elif st.session_state["authentication_status"] is False:
-    st.error('ユーザー名またはパスワードが間違っています')
+    st.error('ログインに失敗しました')
