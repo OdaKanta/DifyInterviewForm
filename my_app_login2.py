@@ -45,37 +45,45 @@ if st.session_state["authentication_status"]:
     if "conversation_id" not in st.session_state:
         st.session_state.conversation_id = ""
 
-    # --- ★追加: 初回ログイン時に Dify の「会話の開始」を取得する ---
-    # メッセージ履歴が空の場合、Difyに空のクエリ（またはダミー）を送って最初の挨拶を取得
+    # --- ★ここが修正ポイント: 初回ログイン時に Dify の設定から「開始メッセージ」を取得 ---
     if len(st.session_state.messages) == 0:
         DIFY_KEY = st.secrets["DIFY_API_KEY"]
         headers = {"Authorization": f"Bearer {DIFY_KEY}", "Content-Type": "application/json"}
         
-        # Difyの「会話の開始」をトリガーするために空文字または特定の入力を送信
-        # ※Dify側の設定により、queryが必須の場合は "こんにちは" 等をダミーで送る手法もあります
-        data = {
-            "inputs": {},
-            "query": "hello", # 会話を開始させるためのトリガー
-            "response_mode": "blocking", # 最初はストリーミングなしの方が制御しやすい
-            "user": username,
-            "conversation_id": ""
-        }
-        
         try:
-            response = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=data)
-            res_json = response.json()
-            if "answer" in res_json:
-                st.session_state.messages.append({"role": "assistant", "content": res_json["answer"]})
-                st.session_state.conversation_id = res_json.get("conversation_id", "")
-                # 再描画して表示させる
+            # 1. Difyのアプリ設定（パラメータ）を取得するエンドポイント
+            params_res = requests.get(
+                f"https://api.dify.ai/v1/parameters?user={username}", 
+                headers=headers
+            )
+            params_data = params_res.json()
+            
+            # 2. オープニングステートメントを取得
+            opening_message = params_data.get("opening_statement", "")
+            
+            if opening_message:
+                # メッセージ履歴に追加
+                st.session_state.messages.append({"role": "assistant", "content": opening_message})
+                
+                # 3. 最初の挨拶も音声で流す（不要なら削除してください）
+                tts_response = client.audio.speech.create(
+                    model="tts-1", voice="alloy", input=opening_message
+                )
+                st.session_state.initial_audio = tts_response.content # 一時保存
+                
                 st.rerun()
         except Exception as e:
-            st.error(f"初期メッセージ取得エラー: {e}")
+            st.error(f"初期メッセージの取得に失敗しました: {e}")
 
     # --- UI: 過去のメッセージ表示 ---
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
+
+    # 初回音声再生用の処理
+    if "initial_audio" in st.session_state:
+        st.audio(st.session_state.initial_audio, format="audio/mp3", autoplay=True)
+        del st.session_state.initial_audio # 一度再生したら消す
 
     # --- 音声・テキスト入力処理 ---
     st.write("話しかけてください：")
