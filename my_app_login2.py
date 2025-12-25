@@ -57,7 +57,7 @@ if st.session_state["authentication_status"]:
             # inputsに何も入れず、queryを空（または特定のトリガー）にして送信します。
             data = {
                 "inputs": {},
-                "query": "こんにちは", # または空文字 ""
+                "query": "",
                 "response_mode": "blocking", # 初回はblockingの方が扱いやすい
                 "user": username,
                 "conversation_id": ""
