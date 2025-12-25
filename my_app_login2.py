@@ -9,6 +9,8 @@ import yaml # 設定保存用
 from streamlit_gsheets import GSheetsConnection
 import datetime
 
+user_input = None
+
 # --- 1. ユーザー情報の設定 ---
 names = ["田中 太郎", "佐藤 花子", "工大 太郎"]
 usernames = ["tanaka", "sato", "kodai"]
@@ -59,7 +61,6 @@ if st.session_state["authentication_status"]:
                     "type": "document" # または image
                 }
             }
-            user_input = None
             data = {
                 "inputs": inputs_data,  # ★空だった {} から inputs_data に変更
                 "query": user_input if user_input else "こんにちは",
