@@ -101,7 +101,7 @@ if st.session_state["authentication_status"]:
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
-
+    user_input = None
     # --- メイン処理 (Dify送信 & ログ保存) ---
     if user_input:
         st.session_state.messages.append({"role": "user", "content": user_input})
