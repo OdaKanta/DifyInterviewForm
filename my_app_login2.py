@@ -5,9 +5,9 @@ import json
 from openai import OpenAI
 from streamlit_mic_recorder import mic_recorder
 import io
+import yaml # 設定保存用
 from streamlit_gsheets import GSheetsConnection
 import datetime
-import pandas as pd
 
 # --- 1. ユーザー情報の設定 ---
 names = ["田中 太郎", "佐藤 花子", "工大 太郎"]
@@ -43,49 +43,12 @@ if st.session_state["authentication_status"]:
 
     st.title("音声対応AIアシスタント (ログ収集付)")
 
-    # セッション状態の初期化
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "conversation_id" not in st.session_state:
         st.session_state.conversation_id = ""
-    # ★ 初回起動フラグ
-    if "first_run" not in st.session_state:
-        st.session_state.first_run = True
 
-    # --- ★ 追加: 初回ログイン時のボット発言取得 ---
-    if st.session_state.first_run and len(st.session_state.messages) == 0:
-        with st.spinner('エージェントを準備中...'):
-            DIFY_KEY = st.secrets["DIFY_API_KEY"]
-            headers = {"Authorization": f"Bearer {DIFY_KEY}", "Content-Type": "application/json"}
-            
-            # Difyの「会話の開始」をAPI経由で取得する場合、
-            # inputsに何も入れず、queryを空（または特定のトリガー）にして送信します。
-            data = {
-                "inputs": {},
-                "query": "こんにちは", # または空文字 ""
-                "response_mode": "blocking", # 初回はblockingの方が扱いやすい
-                "user": username,
-                "conversation_id": ""
-            }
-            try:
-                response = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=data)
-                res_json = response.json()
-                
-                if "answer" in res_json:
-                    init_message = res_json["answer"]
-                    st.session_state.conversation_id = res_json["conversation_id"]
-                    st.session_state.messages.append({"role": "assistant", "content": init_message})
-                    
-                    # 初回メッセージも音声で再生したい場合
-                    tts_res = client.audio.speech.create(model="tts-1", voice="alloy", input=init_message)
-                    st.audio(io.BytesIO(tts_res.content), format="audio/mp3", autoplay=True)
-            except Exception as e:
-                st.error(f"初期メッセージ取得エラー: {e}")
-        
-        st.session_state.first_run = False
-        st.rerun() # 画面を更新してメッセージを表示させる
-
-    # --- 入力 UI (変更なし) ---
+    # --- 音声・テキスト入力処理 (前回と同じ) ---
     st.write("話しかけてください：")
     audio = mic_recorder(start_prompt="⏺️ 録音開始", stop_prompt="⏹️ 停止", key='recorder')
     user_input = None
@@ -101,19 +64,17 @@ if st.session_state["authentication_status"]:
     if chat_input:
         user_input = chat_input
 
-    # 過去ログの表示
+    # 過去の表示
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # --- メイン処理 (既存のロジック) ---
+    # --- メイン処理 (Dify送信 & ログ保存) ---
     if user_input:
-        # ユーザーのメッセージを表示
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"):
             st.markdown(user_input)
 
-        # AIの回答処理
         with st.chat_message("assistant"):
             response_placeholder = st.empty()
             full_response = ""
@@ -141,22 +102,55 @@ if st.session_state["authentication_status"]:
             response_placeholder.markdown(full_response)
             st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-            # ログ保存 (try-exceptブロックなどはそのまま維持)
+            # --- ★ここからログ書き込み処理 ---
             try:
+                # 現在の時刻
                 now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S')
-                existing_data = conn.read(spreadsheet=st.secrets["spreadsheet_url"], ttl=0)
+                
+                # 【重要】ttl=0 を追加してキャッシュを無効化し、常に最新のスプレッドシートを読み込む
+                # また、空の行を読み込まないように引数を調整
+                existing_data = conn.read(
+                    spreadsheet=st.secrets["spreadsheet_url"], 
+                    ttl=0  # キャッシュを0秒にする（毎回新しく読み込む）
+                )
+                
+                # 新しい行を作成
                 new_row = {
-                    "date": now, "user_id": username, "user_input": user_input,
-                    "ai_response": full_response, "conversation_id": st.session_state.conversation_id
+                    "date": now,
+                    "user_id": username,
+                    "user_input": user_input,
+                    "ai_response": full_response,
+                    "conversation_id": st.session_state.conversation_id
                 }
+                
+                # データを追記
+                import pandas as pd
                 new_row_df = pd.DataFrame([new_row])
-                updated_df = pd.concat([existing_data, new_row_df], ignore_index=True) if not existing_data.empty else new_row_df
+                
+                # 既存データが空の場合でも動くように処理
+                if existing_data.empty:
+                    updated_df = new_row_df
+                else:
+                    updated_df = pd.concat([existing_data, new_row_df], ignore_index=True)
+                
+                # スプレッドシートを更新
                 conn.update(spreadsheet=st.secrets["spreadsheet_url"], data=updated_df)
+                
             except Exception as e:
                 st.error(f"ログ保存エラー: {e}")
 
-            # 音声再生
-            if full_response.strip():
+            # --- 音声出力 (OpenAI TTS) ---
+            # full_response が空（""）でないか、また文字数が少なすぎないか確認
+            if full_response.strip(): 
                 with st.spinner('音声を生成中...'):
-                    tts_response = client.audio.speech.create(model="tts-1", voice="alloy", input=full_response)
-                    st.audio(io.BytesIO(tts_response.content), format="audio/mp3", autoplay=True)
+                    try:
+                        tts_response = client.audio.speech.create(
+                            model="tts-1", 
+                            voice="alloy", 
+                            input=full_response
+                        )
+                        st.audio(io.BytesIO(tts_response.content), format="audio/mp3", autoplay=True)
+                    except Exception as e:
+                        st.error(f"音声生成エラー: {e}")
+            else:
+                st.warning("AIからの回答が空だったため、音声は生成されませんでした。")
