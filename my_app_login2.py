@@ -9,34 +9,41 @@ from streamlit_gsheets import GSheetsConnection
 import datetime
 import pandas as pd
 
-# --- 1. ユーザー情報の設定 (変更なし) ---
+PDF_URL = "https://odakanta.github.io/DifyInterviewForm/CV11.pdf"
+
+# --- 1. ユーザー情報の設定 ---
 names = ["田中 太郎", "佐藤 花子", "工大 太郎"]
 usernames = ["tanaka", "sato", "kodai"]
 passwords = ["pass123", "pass456", "password"]
 
+# ログイン部品の準備
 authenticator = stauth.Authenticate(
     {'usernames': {
         usernames[0]: {'name': names[0], 'password': passwords[0]},
         usernames[1]: {'name': names[1], 'password': passwords[1]},
         usernames[2]: {'name': names[2], 'password': passwords[2]}
     }},
-    "dify_app_cookie", "signature_key", cookie_expiry_days=30
+    "dify_app_cookie", # クッキー名
+    "signature_key",   # 署名キー
+    cookie_expiry_days=30
 )
 
-# --- 2. ログイン画面 ---
+# --- 2. ログイン画面の表示 ---
 authenticator.login('main')
 
 if st.session_state["authentication_status"]:
     username = st.session_state["username"]
     name = st.session_state["name"]
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+
+    # --- ★スプレッドシート接続の準備 ---
     conn = st.connection("gsheets", type=GSheetsConnection)
 
     with st.sidebar:
         st.write(f"ようこそ、{name} さん")
         authenticator.logout('ログアウト', 'sidebar')
 
-    st.title("音声対応AIアシスタント 03")
+    st.title("音声対応AIアシスタント (ログ収集付)")
 
     # セッション状態の初期化
     if "messages" not in st.session_state:
@@ -47,18 +54,22 @@ if st.session_state["authentication_status"]:
     if "first_run" not in st.session_state:
         st.session_state.first_run = True
 
-    # --- ★ 追加: 初回ログイン時のボット発言取得 ---
+    # --- ★ 修正: 初回ログイン時のボット発言取得 ---
     if st.session_state.first_run and len(st.session_state.messages) == 0:
         with st.spinner('エージェントを準備中...'):
             DIFY_KEY = st.secrets["DIFY_API_KEY"]
             headers = {"Authorization": f"Bearer {DIFY_KEY}", "Content-Type": "application/json"}
             
-            # Difyの「会話の開始」をAPI経由で取得する場合、
-            # inputsに何も入れず、queryを空（または特定のトリガー）にして送信します。
             data = {
-                "inputs": {},
-                "query": "こんにちは", # または空文字 ""
-                "response_mode": "blocking", # 初回はblockingの方が扱いやすい
+                "inputs": {
+                    "material": {
+                        "transfer_method": "remote_url",
+                        "type": "document",
+                        "url": PDF_URL
+                    }
+                },
+                "query": "",  # ★重要: ここを空文字にすると「会話の開始」メッセージが返ります
+                "response_mode": "blocking",
                 "user": username,
                 "conversation_id": ""
             }
@@ -66,19 +77,20 @@ if st.session_state["authentication_status"]:
                 response = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=data)
                 res_json = response.json()
                 
-                if "answer" in res_json:
+                # answer または event が message のものを取得
+                if "answer" in res_json and res_json["answer"]:
                     init_message = res_json["answer"]
                     st.session_state.conversation_id = res_json["conversation_id"]
                     st.session_state.messages.append({"role": "assistant", "content": init_message})
                     
-                    # 初回メッセージも音声で再生したい場合
+                    # 音声再生
                     tts_res = client.audio.speech.create(model="tts-1", voice="alloy", input=init_message)
                     st.audio(io.BytesIO(tts_res.content), format="audio/mp3", autoplay=True)
             except Exception as e:
                 st.error(f"初期メッセージ取得エラー: {e}")
         
         st.session_state.first_run = False
-        st.rerun() # 画面を更新してメッセージを表示させる
+        st.rerun()
 
     # --- 入力 UI (変更なし) ---
     st.write("話しかけてください：")
@@ -116,8 +128,17 @@ if st.session_state["authentication_status"]:
             DIFY_KEY = st.secrets["DIFY_API_KEY"]
             headers = {"Authorization": f"Bearer {DIFY_KEY}", "Content-Type": "application/json"}
             data = {
-                "inputs": {}, "query": user_input, "response_mode": "streaming",
-                "user": username, "conversation_id": st.session_state.conversation_id
+                "inputs": {
+                    "material": { # ★ユーザー質問時にも PDF 情報を送る必要があります
+                        "transfer_method": "remote_url",
+                        "type": "document",
+                        "url": PDF_URL
+                    }
+                }, 
+                "query": user_input, 
+                "response_mode": "streaming",
+                "user": username, 
+                "conversation_id": st.session_state.conversation_id
             }
 
             response = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=data, stream=True)
