@@ -9,8 +9,6 @@ from streamlit_gsheets import GSheetsConnection
 import datetime
 import pandas as pd
 
-PDF_URL = "https://odakanta.github.io/DifyInterviewForm/CV11.pdf"
-
 # --- 1. ユーザー情報の設定 ---
 names = ["田中 太郎", "佐藤 花子", "工大 太郎"]
 usernames = ["tanaka", "sato", "kodai"]
@@ -45,54 +43,43 @@ if st.session_state["authentication_status"]:
 
     st.title("音声対応AIアシスタント (ログ収集付)")
 
-    # セッション状態の初期化
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "conversation_id" not in st.session_state:
         st.session_state.conversation_id = ""
-    # ★ 初回起動フラグ
-    if "first_run" not in st.session_state:
-        st.session_state.first_run = True
 
-    # --- ★ 修正: 初回ログイン時のボット発言取得 ---
-    if st.session_state.first_run and len(st.session_state.messages) == 0:
-        with st.spinner('エージェントを準備中...'):
-            DIFY_KEY = st.secrets["DIFY_API_KEY"]
-            headers = {"Authorization": f"Bearer {DIFY_KEY}", "Content-Type": "application/json"}
-            
-            data = {
-                "inputs": {
-                    "material": {
-                        "transfer_method": "remote_url",
-                        "type": "document",
-                        "url": PDF_URL
-                    }
-                },
-                "query": "",  # ★重要: ここを空文字にすると「会話の開始」メッセージが返ります
-                "response_mode": "blocking",
-                "user": username,
-                "conversation_id": ""
-            }
-            try:
-                response = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=data)
-                res_json = response.json()
-                
-                # answer または event が message のものを取得
-                if "answer" in res_json and res_json["answer"]:
-                    init_message = res_json["answer"]
-                    st.session_state.conversation_id = res_json["conversation_id"]
-                    st.session_state.messages.append({"role": "assistant", "content": init_message})
-                    
-                    # 音声再生
-                    tts_res = client.audio.speech.create(model="tts-1", voice="alloy", input=init_message)
-                    st.audio(io.BytesIO(tts_res.content), format="audio/mp3", autoplay=True)
-            except Exception as e:
-                st.error(f"初期メッセージ取得エラー: {e}")
-        
-        st.session_state.first_run = False
-        st.rerun()
+    # --- ★初回ボットメッセージ取得（会話開始） ---
+    if "initialized" not in st.session_state:
+        st.session_state.initialized = True
 
-    # --- 入力 UI (変更なし) ---
+        DIFY_KEY = st.secrets["DIFY_API_KEY"]
+        headers = {"Authorization": f"Bearer {DIFY_KEY}", "Content-Type": "application/json"}
+
+        data = {
+            "inputs": {}, "query": "", "response_mode": "streaming",
+            "user": username, "conversation_id": st.session_state.conversation_id
+        }
+
+        response = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=data, stream=True)
+        full_response = ""
+        response_placeholder = st.empty()
+
+        for line in response.iter_lines():
+            if line:
+                decoded_line = line.decode('utf-8')
+                if decoded_line.startswith('data: '):
+                    chunk = json.loads(decoded_line[6:])
+                    if "conversation_id" in chunk:
+                        st.session_state.conversation_id = chunk["conversation_id"]
+                    if "answer" in chunk:
+                        full_response += chunk["answer"]
+                        response_placeholder.markdown(full_response + "▌")
+
+        response_placeholder.markdown(full_response)
+        if full_response.strip():
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+    # --- 音声・テキスト入力処理 ---
     st.write("話しかけてください：")
     audio = mic_recorder(start_prompt="⏺️ 録音開始", stop_prompt="⏹️ 停止", key='recorder')
     user_input = None
@@ -108,19 +95,17 @@ if st.session_state["authentication_status"]:
     if chat_input:
         user_input = chat_input
 
-    # 過去ログの表示
+    # 過去の表示
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # --- メイン処理 (既存のロジック) ---
+    # --- メイン処理 (Dify送信 & ログ保存) ---
     if user_input:
-        # ユーザーのメッセージを表示
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"):
             st.markdown(user_input)
 
-        # AIの回答処理
         with st.chat_message("assistant"):
             response_placeholder = st.empty()
             full_response = ""
@@ -128,17 +113,8 @@ if st.session_state["authentication_status"]:
             DIFY_KEY = st.secrets["DIFY_API_KEY"]
             headers = {"Authorization": f"Bearer {DIFY_KEY}", "Content-Type": "application/json"}
             data = {
-                "inputs": {
-                    "material": { # ★ユーザー質問時にも PDF 情報を送る必要があります
-                        "transfer_method": "remote_url",
-                        "type": "document",
-                        "url": PDF_URL
-                    }
-                }, 
-                "query": user_input, 
-                "response_mode": "streaming",
-                "user": username, 
-                "conversation_id": st.session_state.conversation_id
+                "inputs": {}, "query": user_input, "response_mode": "streaming",
+                "user": username, "conversation_id": st.session_state.conversation_id
             }
 
             response = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=data, stream=True)
@@ -157,22 +133,37 @@ if st.session_state["authentication_status"]:
             response_placeholder.markdown(full_response)
             st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-            # ログ保存 (try-exceptブロックなどはそのまま維持)
+            # --- ログ書き込み処理 ---
             try:
                 now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S')
                 existing_data = conn.read(spreadsheet=st.secrets["spreadsheet_url"], ttl=0)
                 new_row = {
-                    "date": now, "user_id": username, "user_input": user_input,
-                    "ai_response": full_response, "conversation_id": st.session_state.conversation_id
+                    "date": now,
+                    "user_id": username,
+                    "user_input": user_input,
+                    "ai_response": full_response,
+                    "conversation_id": st.session_state.conversation_id
                 }
                 new_row_df = pd.DataFrame([new_row])
-                updated_df = pd.concat([existing_data, new_row_df], ignore_index=True) if not existing_data.empty else new_row_df
+                if existing_data.empty:
+                    updated_df = new_row_df
+                else:
+                    updated_df = pd.concat([existing_data, new_row_df], ignore_index=True)
                 conn.update(spreadsheet=st.secrets["spreadsheet_url"], data=updated_df)
             except Exception as e:
                 st.error(f"ログ保存エラー: {e}")
 
-            # 音声再生
-            if full_response.strip():
+            # --- 音声出力 (OpenAI TTS) ---
+            if full_response.strip(): 
                 with st.spinner('音声を生成中...'):
-                    tts_response = client.audio.speech.create(model="tts-1", voice="alloy", input=full_response)
-                    st.audio(io.BytesIO(tts_response.content), format="audio/mp3", autoplay=True)
+                    try:
+                        tts_response = client.audio.speech.create(
+                            model="tts-1", 
+                            voice="alloy", 
+                            input=full_response
+                        )
+                        st.audio(io.BytesIO(tts_response.content), format="audio/mp3", autoplay=True)
+                    except Exception as e:
+                        st.error(f"音声生成エラー: {e}")
+            else:
+                st.warning("AIからの回答が空だったため、音声は生成されませんでした。")
