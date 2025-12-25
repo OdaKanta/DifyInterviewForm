@@ -54,24 +54,22 @@ if st.session_state["authentication_status"]:
     if "first_run" not in st.session_state:
         st.session_state.first_run = True
 
-    # --- ★ 追加: 初回ログイン時のボット発言取得 ---
+    # --- ★ 修正: 初回ログイン時のボット発言取得 ---
     if st.session_state.first_run and len(st.session_state.messages) == 0:
         with st.spinner('エージェントを準備中...'):
             DIFY_KEY = st.secrets["DIFY_API_KEY"]
             headers = {"Authorization": f"Bearer {DIFY_KEY}", "Content-Type": "application/json"}
             
-            # Difyの「会話の開始」をAPI経由で取得する場合、
-            # inputsに何も入れず、queryを空（または特定のトリガー）にして送信します。
             data = {
                 "inputs": {
                     "material": {
-                        "transfer_method": "remote_url", # URL指定
+                        "transfer_method": "remote_url",
                         "type": "document",
                         "url": PDF_URL
                     }
                 },
-                "query": "",
-                "response_mode": "blocking", # 初回はblockingの方が扱いやすい
+                "query": "",  # ★重要: ここを空文字にすると「会話の開始」メッセージが返ります
+                "response_mode": "blocking",
                 "user": username,
                 "conversation_id": ""
             }
@@ -79,19 +77,20 @@ if st.session_state["authentication_status"]:
                 response = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=data)
                 res_json = response.json()
                 
-                if "answer" in res_json:
+                # answer または event が message のものを取得
+                if "answer" in res_json and res_json["answer"]:
                     init_message = res_json["answer"]
                     st.session_state.conversation_id = res_json["conversation_id"]
                     st.session_state.messages.append({"role": "assistant", "content": init_message})
                     
-                    # 初回メッセージも音声で再生したい場合
+                    # 音声再生
                     tts_res = client.audio.speech.create(model="tts-1", voice="alloy", input=init_message)
                     st.audio(io.BytesIO(tts_res.content), format="audio/mp3", autoplay=True)
             except Exception as e:
                 st.error(f"初期メッセージ取得エラー: {e}")
         
         st.session_state.first_run = False
-        st.rerun() # 画面を更新してメッセージを表示させる
+        st.rerun()
 
     # --- 入力 UI (変更なし) ---
     st.write("話しかけてください：")
@@ -129,8 +128,17 @@ if st.session_state["authentication_status"]:
             DIFY_KEY = st.secrets["DIFY_API_KEY"]
             headers = {"Authorization": f"Bearer {DIFY_KEY}", "Content-Type": "application/json"}
             data = {
-                "inputs": {}, "query": user_input, "response_mode": "streaming",
-                "user": username, "conversation_id": st.session_state.conversation_id
+                "inputs": {
+                    "material": { # ★ユーザー質問時にも PDF 情報を送る必要があります
+                        "transfer_method": "remote_url",
+                        "type": "document",
+                        "url": PDF_URL
+                    }
+                }, 
+                "query": user_input, 
+                "response_mode": "streaming",
+                "user": username, 
+                "conversation_id": st.session_state.conversation_id
             }
 
             response = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=data, stream=True)
