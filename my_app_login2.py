@@ -28,80 +28,47 @@ authenticator = stauth.Authenticate(
 
 # --- 2. ログイン画面の表示 ---
 authenticator.login('main')
+
 if st.session_state["authentication_status"]:
     username = st.session_state["username"]
     name = st.session_state["name"]
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+
+    # --- ★スプレッドシート接続の準備 ---
     conn = st.connection("gsheets", type=GSheetsConnection)
 
-    # 会話履歴と会話IDの初期化
+    with st.sidebar:
+        st.write(f"ようこそ、{name} さん")
+        authenticator.logout('ログアウト', 'sidebar')
+
+    st.title("音声対応AIアシスタント (ログ収集付)")
+
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "conversation_id" not in st.session_state:
         st.session_state.conversation_id = ""
 
-    # --- ★追加：ログイン直後の「最初の挨拶」を取得する処理 ---
-    # 履歴が空のとき、自動的にDifyへ「開始」をリクエストする
-    if len(st.session_state.messages) == 0:
-        with st.chat_message("assistant"):
-            response_placeholder = st.empty()
-            full_response = ""
-            
-            DIFY_KEY = st.secrets["DIFY_API_KEY"]
-            headers = {"Authorization": f"Bearer {DIFY_KEY}", "Content-Type": "application/json"}
-            
-            # ★修正：入力フィールドにファイルを指定する場合の書き方
-            # "変数名" は Dify の入力フィールドで設定した名前に書き換えてください
-            inputs_data = {
-                "your_file_variable_name": {
-                    "transfer_method": "local_file", # ローカルファイル参照
-                    "upload_file_id": "ee477849-b192-4035-a6b7-aae8b111a328", # 例: "bf...-..."
-                    "type": "document" # または image
-                }
-            }
-            user_input = None
-            
-            data = {
-                "inputs": inputs_data,  # ★空だった {} から inputs_data に変更
-                "query": user_input if user_input else "こんにちは",
-                "response_mode": "streaming",
-                "user": username,
-                "conversation_id": st.session_state.conversation_id
-            }
+    # --- 音声・テキスト入力処理 (前回と同じ) ---
+    st.write("話しかけてください：")
+    audio = mic_recorder(start_prompt="⏺️ 録音開始", stop_prompt="⏹️ 停止", key='recorder')
+    user_input = None
 
-            response = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=data, stream=True)
+    if audio:
+        audio_bio = io.BytesIO(audio['bytes'])
+        audio_bio.name = "audio.wav"
+        with st.spinner('音声を解析中...'):
+            transcript = client.audio.transcriptions.create(model="whisper-1", file=audio_bio)
+            user_input = transcript.text
+    
+    chat_input = st.chat_input("またはメッセージを入力...")
+    if chat_input:
+        user_input = chat_input
 
-            for line in response.iter_lines():
-                if line:
-                    decoded_line = line.decode('utf-8')
-                    if decoded_line.startswith('data: '):
-                        chunk = json.loads(decoded_line[6:])
-                        if "conversation_id" in chunk:
-                            st.session_state.conversation_id = chunk["conversation_id"]
-                        
-                        # チャットボット形式
-                        if "answer" in chunk:
-                            full_response += chunk["answer"]
-                            response_placeholder.markdown(full_response + "▌")
-                        # チャットフロー形式（text_chunk）
-                        elif "event" in chunk and chunk["event"] == "text_chunk":
-                            if "data" in chunk and "text" in chunk["data"]:
-                                full_response += chunk["data"]["text"]
-                                response_placeholder.markdown(full_response + "▌")
-
-            response_placeholder.markdown(full_response)
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
-            
-            # 最初の挨拶も音声で再生
-            if full_response.strip():
-                tts_response = client.audio.speech.create(model="tts-1", voice="alloy", input=full_response)
-                st.audio(io.BytesIO(tts_response.content), format="audio/mp3", autoplay=True)
-
-    # --- 過去のメッセージを表示 ---
+    # 過去の表示
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
-    user_input = None
+
     # --- メイン処理 (Dify送信 & ログ保存) ---
     if user_input:
         st.session_state.messages.append({"role": "user", "content": user_input})
