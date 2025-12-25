@@ -10,9 +10,9 @@ from streamlit_gsheets import GSheetsConnection
 import datetime
 
 # --- 1. ユーザー情報の設定 ---
-names = ["田中 太郎", "佐藤 花子", "工大 太郎"]
-usernames = ["tanaka", "sato", "kodai"]
-passwords = ["pass123", "pass456", "password"]
+names = ["田中 太郎", "佐藤 花子", "工大 太郎", "工大 花子"]
+usernames = ["tanaka", "sato", "kodai", "hanako"]
+passwords = ["pass123", "pass456", "password", "password"]
 
 # ログイン部品の準備
 authenticator = stauth.Authenticate(
