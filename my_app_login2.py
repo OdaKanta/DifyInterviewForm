@@ -34,92 +34,84 @@ if st.session_state["authentication_status"]:
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
     conn = st.connection("gsheets", type=GSheetsConnection)
 
-    with st.sidebar:
-        st.write(f"ようこそ、{name} さん")
-        authenticator.logout('ログアウト', 'sidebar')
-
-    st.title("音声対応AIアシスタント (ログ収集付)")
-
+    # セッション状態の初期化
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "conversation_id" not in st.session_state:
         st.session_state.conversation_id = ""
+    if "first_run" not in st.session_state:
+        st.session_state.first_run = True
 
-    # --- ★ここが修正ポイント: 初回ログイン時に Dify の設定から「開始メッセージ」を取得 ---
-    if len(st.session_state.messages) == 0:
+    with st.sidebar:
+        st.write(f"ようこそ、{name} さん")
+        authenticator.logout('ログアウト', 'sidebar')
+
+    st.title("音声対応AIアシスタント")
+
+    # --- ★修正1: 初回メッセージの取得ロジックの改善 ---
+    if st.session_state.first_run and len(st.session_state.messages) == 0:
         DIFY_KEY = st.secrets["DIFY_API_KEY"]
         headers = {"Authorization": f"Bearer {DIFY_KEY}", "Content-Type": "application/json"}
-        
         try:
-            # 1. Difyのアプリ設定（パラメータ）を取得するエンドポイント
-            params_res = requests.get(
-                f"https://api.dify.ai/v1/parameters?user={username}", 
-                headers=headers
-            )
-            params_data = params_res.json()
-            
-            # 2. オープニングステートメントを取得
-            opening_message = params_data.get("opening_statement", "")
-            
+            params_res = requests.get(f"https://api.dify.ai/v1/parameters?user={username}", headers=headers)
+            opening_message = params_res.json().get("opening_statement", "")
             if opening_message:
-                # メッセージ履歴に追加
                 st.session_state.messages.append({"role": "assistant", "content": opening_message})
+                # rerunする前にfirst_runをオフにする
+                st.session_state.first_run = False
                 
-                # 3. 最初の挨拶も音声で流す（不要なら削除してください）
-                tts_response = client.audio.speech.create(
-                    model="tts-1", voice="alloy", input=opening_message
-                )
-                st.session_state.initial_audio = tts_response.content # 一時保存
-                
+                # 初回の音声生成
+                tts_res = client.audio.speech.create(model="tts-1", voice="alloy", input=opening_message)
+                st.session_state.pending_audio = tts_res.content
                 st.rerun()
         except Exception as e:
-            st.error(f"初期メッセージの取得に失敗しました: {e}")
+            st.error(f"初期メッセージ取得エラー: {e}")
+            st.session_state.first_run = False
 
-    # --- UI: 過去のメッセージ表示 ---
+    # --- 過去のメッセージ表示 ---
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # 初回音声再生用の処理
-    if "initial_audio" in st.session_state:
-        st.audio(st.session_state.initial_audio, format="audio/mp3", autoplay=True)
-        del st.session_state.initial_audio # 一度再生したら消す
+    # --- ★修正2: 音声の自動再生（rerun後も確実に実行） ---
+    if "pending_audio" in st.session_state:
+        st.audio(st.session_state.pending_audio, format="audio/mp3", autoplay=True)
+        del st.session_state.pending_audio
 
-    # --- 音声・テキスト入力処理 ---
-    st.write("話しかけてください：")
-    audio = mic_recorder(start_prompt="⏺️ 録音開始", stop_prompt="⏹️ 停止", key='recorder')
+    # --- 入力インターフェース ---
+    st.write("---")
+    audio_data = mic_recorder(start_prompt="⏺️ 録音開始", stop_prompt="⏹️ 停止", key='recorder')
+    chat_input = st.chat_input("またはメッセージを入力...")
+
     user_input = None
-
-    if audio:
-        audio_bio = io.BytesIO(audio['bytes'])
+    if audio_data:
+        audio_bio = io.BytesIO(audio_data['bytes'])
         audio_bio.name = "audio.wav"
         with st.spinner('音声を解析中...'):
             transcript = client.audio.transcriptions.create(model="whisper-1", file=audio_bio)
             user_input = transcript.text
-    
-    chat_input = st.chat_input("またはメッセージを入力...")
-    if chat_input:
+    elif chat_input:
         user_input = chat_input
 
     # --- メイン処理 (Dify送信 & ログ保存) ---
     if user_input:
+        # ユーザーの発言を表示・保存
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"):
             st.markdown(user_input)
 
+        # AIの返答処理
         with st.chat_message("assistant"):
             response_placeholder = st.empty()
             full_response = ""
-
             DIFY_KEY = st.secrets["DIFY_API_KEY"]
             headers = {"Authorization": f"Bearer {DIFY_KEY}", "Content-Type": "application/json"}
             data = {
                 "inputs": {}, "query": user_input, "response_mode": "streaming",
                 "user": username, "conversation_id": st.session_state.conversation_id
             }
-
+            
             response = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=data, stream=True)
-
             for line in response.iter_lines():
                 if line:
                     decoded_line = line.decode('utf-8')
@@ -130,31 +122,25 @@ if st.session_state["authentication_status"]:
                         if "answer" in chunk:
                             full_response += chunk["answer"]
                             response_placeholder.markdown(full_response + "▌")
-
+            
             response_placeholder.markdown(full_response)
             st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-            # --- ログ書き込み処理 (省略なし) ---
+            # ログ保存 (GSheets)
             try:
                 now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S')
                 existing_data = conn.read(spreadsheet=st.secrets["spreadsheet_url"], ttl=0)
-                new_row = {
+                new_row = pd.DataFrame([{
                     "date": now, "user_id": username, "user_input": user_input,
                     "ai_response": full_response, "conversation_id": st.session_state.conversation_id
-                }
-                new_row_df = pd.DataFrame([new_row])
-                updated_df = pd.concat([existing_data, new_row_df], ignore_index=True) if not existing_data.empty else new_row_df
+                }])
+                updated_df = pd.concat([existing_data, new_row], ignore_index=True) if not existing_data.empty else new_row
                 conn.update(spreadsheet=st.secrets["spreadsheet_url"], data=updated_df)
             except Exception as e:
                 st.error(f"ログ保存エラー: {e}")
 
-            # --- 音声出力 (OpenAI TTS) ---
-            if full_response.strip(): 
+            # AI音声生成
+            if full_response.strip():
                 with st.spinner('音声を生成中...'):
-                    try:
-                        tts_response = client.audio.speech.create(
-                            model="tts-1", voice="alloy", input=full_response
-                        )
-                        st.audio(io.BytesIO(tts_response.content), format="audio/mp3", autoplay=True)
-                    except Exception as e:
-                        st.error(f"音声生成エラー: {e}")
+                    tts_res = client.audio.speech.create(model="tts-1", voice="alloy", input=full_response)
+                    st.audio(io.BytesIO(tts_res.content), format="audio/mp3", autoplay=True)
