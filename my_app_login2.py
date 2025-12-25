@@ -9,6 +9,8 @@ from streamlit_gsheets import GSheetsConnection
 import datetime
 import pandas as pd
 
+PDF_URL = "https://odakanta.github.io/DifyInterviewForm/CV11.pdf"
+
 # --- 1. ユーザー情報の設定 ---
 names = ["田中 太郎", "佐藤 花子", "工大 太郎"]
 usernames = ["tanaka", "sato", "kodai"]
@@ -61,7 +63,13 @@ if st.session_state["authentication_status"]:
             # Difyの「会話の開始」をAPI経由で取得する場合、
             # inputsに何も入れず、queryを空（または特定のトリガー）にして送信します。
             data = {
-                "inputs": {},
+                "inputs": {
+                    "material": {
+                        "transfer_method": "remote_url", # URL指定
+                        "type": "document",
+                        "url": PDF_URL
+                    }
+                },
                 "query": "こんにちは", # または空文字 ""
                 "response_mode": "blocking", # 初回はblockingの方が扱いやすい
                 "user": username,
