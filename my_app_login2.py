@@ -20,7 +20,7 @@ authenticator = stauth.Authenticate(
         usernames[0]: {'name': names[0], 'password': passwords[0]},
         usernames[1]: {'name': names[1], 'password': passwords[1]},
         usernames[2]: {'name': names[2], 'password': passwords[2]},
-        usernames[2]: {'name': names[2], 'password': passwords[3]}
+        usernames[3]: {'name': names[3], 'password': passwords[3]}
     }},
     "dify_app_cookie", # クッキー名
     "signature_key",   # 署名キー
