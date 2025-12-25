@@ -25,7 +25,7 @@ authenticator = stauth.Authenticate(
     "signature_key",   # 署名キー
     cookie_expiry_days=30
 )
-
+user_input = None
 # --- 2. ログイン画面の表示 ---
 authenticator.login('main')
 if st.session_state["authentication_status"]:
