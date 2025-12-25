@@ -55,7 +55,7 @@ if st.session_state["authentication_status"]:
             inputs_data = {
                 "material": {
                     "transfer_method": "local_file", # ローカルファイル参照
-                    "upload_file_id": "ee477849-b192-4035-a6b7-aae8b111a328", # 例: "bf...-..."
+                    "upload_file_id": "18afae38-1174-4f49-adda-020f12f4c0a7", # 例: "bf...-..."
                     "type": "document" # または image
                 }
             }
