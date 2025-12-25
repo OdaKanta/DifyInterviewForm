@@ -9,8 +9,6 @@ import yaml # 設定保存用
 from streamlit_gsheets import GSheetsConnection
 import datetime
 
-user_input = None
-
 # --- 1. ユーザー情報の設定 ---
 names = ["田中 太郎", "佐藤 花子", "工大 太郎"]
 usernames = ["tanaka", "sato", "kodai"]
@@ -55,12 +53,13 @@ if st.session_state["authentication_status"]:
             # ★修正：入力フィールドにファイルを指定する場合の書き方
             # "変数名" は Dify の入力フィールドで設定した名前に書き換えてください
             inputs_data = {
-                "material": {
+                "your_file_variable_name": {
                     "transfer_method": "local_file", # ローカルファイル参照
                     "upload_file_id": "ee477849-b192-4035-a6b7-aae8b111a328", # 例: "bf...-..."
                     "type": "document" # または image
                 }
             }
+
             data = {
                 "inputs": inputs_data,  # ★空だった {} から inputs_data に変更
                 "query": user_input if user_input else "こんにちは",
