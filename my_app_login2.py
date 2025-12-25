@@ -59,7 +59,7 @@ if st.session_state["authentication_status"]:
                     "type": "document" # または image
                 }
             }
-
+            user_input = None
             data = {
                 "inputs": inputs_data,  # ★空だった {} から inputs_data に変更
                 "query": user_input if user_input else "こんにちは",
@@ -100,8 +100,6 @@ if st.session_state["authentication_status"]:
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
-
-    user_input = None
 
     # --- メイン処理 (Dify送信 & ログ保存) ---
     if user_input:
