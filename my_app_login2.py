@@ -5,16 +5,16 @@ import json
 from openai import OpenAI
 from streamlit_mic_recorder import mic_recorder
 import io
-import yaml # 設定保存用
+import yaml
 from streamlit_gsheets import GSheetsConnection
 import datetime
+import pandas as pd
 
 # --- 1. ユーザー情報の設定 ---
 names = ["田中 太郎", "佐藤 花子", "工大 太郎", "工大 花子"]
 usernames = ["tanaka", "sato", "kodai", "hanako"]
-passwords = ["pass123", "pass456", "password", "password"]
+passwords = ["pass123", "pass456", "password"]
 
-# ログイン部品の準備
 authenticator = stauth.Authenticate(
     {'usernames': {
         usernames[0]: {'name': names[0], 'password': passwords[0]},
@@ -22,76 +22,76 @@ authenticator = stauth.Authenticate(
         usernames[2]: {'name': names[2], 'password': passwords[2]},
         usernames[3]: {'name': names[3], 'password': passwords[3]}
     }},
-    "dify_app_cookie", # クッキー名
-    "signature_key",   # 署名キー
-    cookie_expiry_days=30
+    "dify_app_cookie", "signature_key", cookie_expiry_days=30
 )
 
 # --- 2. ログイン画面の表示 ---
 authenticator.login('main')
+
 if st.session_state["authentication_status"]:
     username = st.session_state["username"]
     name = st.session_state["name"]
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
     conn = st.connection("gsheets", type=GSheetsConnection)
 
-    # 会話履歴と会話IDの初期化
+    with st.sidebar:
+        st.write(f"ようこそ、{name} さん")
+        authenticator.logout('ログアウト', 'sidebar')
+
+    st.title("音声対応AIアシスタント (ログ収集付)")
+
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "conversation_id" not in st.session_state:
         st.session_state.conversation_id = ""
 
-    # --- ★追加：ログイン直後の「最初の挨拶」を取得する処理 ---
-    # 履歴が空のとき、自動的にDifyへ「開始」をリクエストする
+    # --- ★追加: 初回ログイン時に Dify の「会話の開始」を取得する ---
+    # メッセージ履歴が空の場合、Difyに空のクエリ（またはダミー）を送って最初の挨拶を取得
     if len(st.session_state.messages) == 0:
-        with st.chat_message("assistant"):
-            response_placeholder = st.empty()
-            full_response = ""
-            
-            DIFY_KEY = st.secrets["DIFY_API_KEY"]
-            headers = {"Authorization": f"Bearer {DIFY_KEY}", "Content-Type": "application/json"}
-            
-            # 最初の挨拶を取得するために「inputs」は空、
-            # queryには「(開始)」などのダミーを入れるか、Dify側で設定されていれば空でも動きます
-            data = {
-                "inputs": {},
-                "query": "こんにちは", # Dify側で会話を開始させるためのトリガー
-                "response_mode": "streaming",
-                "user": username
-            }
+        DIFY_KEY = st.secrets["DIFY_API_KEY"]
+        headers = {"Authorization": f"Bearer {DIFY_KEY}", "Content-Type": "application/json"}
+        
+        # Difyの「会話の開始」をトリガーするために空文字または特定の入力を送信
+        # ※Dify側の設定により、queryが必須の場合は "こんにちは" 等をダミーで送る手法もあります
+        data = {
+            "inputs": {},
+            "query": "hello", # 会話を開始させるためのトリガー
+            "response_mode": "blocking", # 最初はストリーミングなしの方が制御しやすい
+            "user": username,
+            "conversation_id": ""
+        }
+        
+        try:
+            response = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=data)
+            res_json = response.json()
+            if "answer" in res_json:
+                st.session_state.messages.append({"role": "assistant", "content": res_json["answer"]})
+                st.session_state.conversation_id = res_json.get("conversation_id", "")
+                # 再描画して表示させる
+                st.rerun()
+        except Exception as e:
+            st.error(f"初期メッセージ取得エラー: {e}")
 
-            response = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=data, stream=True)
-
-            for line in response.iter_lines():
-                if line:
-                    decoded_line = line.decode('utf-8')
-                    if decoded_line.startswith('data: '):
-                        chunk = json.loads(decoded_line[6:])
-                        if "conversation_id" in chunk:
-                            st.session_state.conversation_id = chunk["conversation_id"]
-                        
-                        # チャットボット形式
-                        if "answer" in chunk:
-                            full_response += chunk["answer"]
-                            response_placeholder.markdown(full_response + "▌")
-                        # チャットフロー形式（text_chunk）
-                        elif "event" in chunk and chunk["event"] == "text_chunk":
-                            if "data" in chunk and "text" in chunk["data"]:
-                                full_response += chunk["data"]["text"]
-                                response_placeholder.markdown(full_response + "▌")
-
-            response_placeholder.markdown(full_response)
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
-            
-            # 最初の挨拶も音声で再生
-            if full_response.strip():
-                tts_response = client.audio.speech.create(model="tts-1", voice="alloy", input=full_response)
-                st.audio(io.BytesIO(tts_response.content), format="audio/mp3", autoplay=True)
-
-    # --- 過去のメッセージを表示 ---
+    # --- UI: 過去のメッセージ表示 ---
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
+
+    # --- 音声・テキスト入力処理 ---
+    st.write("話しかけてください：")
+    audio = mic_recorder(start_prompt="⏺️ 録音開始", stop_prompt="⏹️ 停止", key='recorder')
+    user_input = None
+
+    if audio:
+        audio_bio = io.BytesIO(audio['bytes'])
+        audio_bio.name = "audio.wav"
+        with st.spinner('音声を解析中...'):
+            transcript = client.audio.transcriptions.create(model="whisper-1", file=audio_bio)
+            user_input = transcript.text
+    
+    chat_input = st.chat_input("またはメッセージを入力...")
+    if chat_input:
+        user_input = chat_input
 
     # --- メイン処理 (Dify送信 & ログ保存) ---
     if user_input:
@@ -126,55 +126,27 @@ if st.session_state["authentication_status"]:
             response_placeholder.markdown(full_response)
             st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-            # --- ★ここからログ書き込み処理 ---
+            # --- ログ書き込み処理 (省略なし) ---
             try:
-                # 現在の時刻
                 now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S')
-                
-                # 【重要】ttl=0 を追加してキャッシュを無効化し、常に最新のスプレッドシートを読み込む
-                # また、空の行を読み込まないように引数を調整
-                existing_data = conn.read(
-                    spreadsheet=st.secrets["spreadsheet_url"], 
-                    ttl=0  # キャッシュを0秒にする（毎回新しく読み込む）
-                )
-                
-                # 新しい行を作成
+                existing_data = conn.read(spreadsheet=st.secrets["spreadsheet_url"], ttl=0)
                 new_row = {
-                    "date": now,
-                    "user_id": username,
-                    "user_input": user_input,
-                    "ai_response": full_response,
-                    "conversation_id": st.session_state.conversation_id
+                    "date": now, "user_id": username, "user_input": user_input,
+                    "ai_response": full_response, "conversation_id": st.session_state.conversation_id
                 }
-                
-                # データを追記
-                import pandas as pd
                 new_row_df = pd.DataFrame([new_row])
-                
-                # 既存データが空の場合でも動くように処理
-                if existing_data.empty:
-                    updated_df = new_row_df
-                else:
-                    updated_df = pd.concat([existing_data, new_row_df], ignore_index=True)
-                
-                # スプレッドシートを更新
+                updated_df = pd.concat([existing_data, new_row_df], ignore_index=True) if not existing_data.empty else new_row_df
                 conn.update(spreadsheet=st.secrets["spreadsheet_url"], data=updated_df)
-                
             except Exception as e:
                 st.error(f"ログ保存エラー: {e}")
 
             # --- 音声出力 (OpenAI TTS) ---
-            # full_response が空（""）でないか、また文字数が少なすぎないか確認
             if full_response.strip(): 
                 with st.spinner('音声を生成中...'):
                     try:
                         tts_response = client.audio.speech.create(
-                            model="tts-1", 
-                            voice="alloy", 
-                            input=full_response
+                            model="tts-1", voice="alloy", input=full_response
                         )
                         st.audio(io.BytesIO(tts_response.content), format="audio/mp3", autoplay=True)
                     except Exception as e:
                         st.error(f"音声生成エラー: {e}")
-            else:
-                st.warning("AIからの回答が空だったため、音声は生成されませんでした。")
