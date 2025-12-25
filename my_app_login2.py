@@ -68,24 +68,24 @@ if st.session_state["authentication_status"]:
                         "url": PDF_URL
                     }
                 },
-                "query": "",  # ★重要: ここを空文字にすると「会話の開始」メッセージが返ります
-                "response_mode": "blocking",
+                # queryが空で反応しない場合は、開始のきっかけになる言葉を入れます
+                "query": "こんにちは。インタビューを始めてください。", 
+                "response_mode": "blocking", 
                 "user": username,
                 "conversation_id": ""
             }
             try:
-                response = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=data)
+                response = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=data, timeout=20)
                 res_json = response.json()
                 
-                # answer または event が message のものを取得
                 if "answer" in res_json and res_json["answer"]:
                     init_message = res_json["answer"]
                     st.session_state.conversation_id = res_json["conversation_id"]
+                    # 履歴に追加
                     st.session_state.messages.append({"role": "assistant", "content": init_message})
                     
-                    # 音声再生
-                    tts_res = client.audio.speech.create(model="tts-1", voice="alloy", input=init_message)
-                    st.audio(io.BytesIO(tts_res.content), format="audio/mp3", autoplay=True)
+                    # 音声再生用（再生を確実にするため、ここはst.rerunの前にaudioを表示させない方がいい場合もありますが、
+                    # まずは履歴に追加することを優先します）
             except Exception as e:
                 st.error(f"初期メッセージ取得エラー: {e}")
         
