@@ -51,27 +51,21 @@ if st.session_state["authentication_status"]:
     # --- 初回ログイン時の「開始メッセージ」取得ロジック ---
     if st.session_state.first_run:
         try:
-            # Difyのパラメータから開始メッセージを取得
             params_res = requests.get("https://api.dify.ai/v1/parameters", headers=headers, params={"user": username})
             params_res.raise_for_status()
             params_data = params_res.json()
-            
-            # opening_statementを取得（空の場合はデフォルト値を設定）
             opening_statement = params_data.get("opening_statement", "")
             
             if opening_statement:
                 st.session_state.messages.append({"role": "assistant", "content": opening_statement})
-                
-                # ★修正ポイント: 文字列が空でないことを確認してからTTSを実行
                 if len(opening_statement.strip()) > 0:
                     tts_init = client.audio.speech.create(model="tts-1", voice="alloy", input=opening_statement)
-                    st.audio(io.BytesIO(tts_init.content), format="audio/mp3", autoplay=True)
+                    st.session_state.initial_audio = tts_init.content # 音声をセッションに保存
             else:
-                # Dify側で「開始の挨拶」が未設定の場合のフォールバック
                 fallback_msg = "こんにちは！何かお手伝いしましょうか？"
                 st.session_state.messages.append({"role": "assistant", "content": fallback_msg})
                 tts_init = client.audio.speech.create(model="tts-1", voice="alloy", input=fallback_msg)
-                st.audio(io.BytesIO(tts_init.content), format="audio/mp3", autoplay=True)
+                st.session_state.initial_audio = tts_init.content
                 
         except Exception as e:
             st.error(f"初期設定取得エラー: {e}")
@@ -79,7 +73,17 @@ if st.session_state["authentication_status"]:
         st.session_state.first_run = False
         st.rerun()
 
-    # --- UI ---
+    # 初回音声を再生（rerun後に一度だけ再生されるようにする）
+    if "initial_audio" in st.session_state:
+        st.audio(io.BytesIO(st.session_state.initial_audio), format="audio/mp3", autoplay=True)
+        del st.session_state.initial_audio
+
+    # --- 履歴の描画 (常に行う) ---
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # --- 入力 UI ---
     st.write("話しかけてください：")
     audio = mic_recorder(start_prompt="⏺️ 録音開始", stop_prompt="⏹️ 停止", key='recorder')
     user_input = None
@@ -95,14 +99,11 @@ if st.session_state["authentication_status"]:
     if chat_input:
         user_input = chat_input
 
-    # 履歴表示
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
     # --- メインチャット処理 ---
     if user_input:
+        # ユーザー入力を履歴に追加
         st.session_state.messages.append({"role": "user", "content": user_input})
+        # 即座に画面に表示
         with st.chat_message("user"):
             st.markdown(user_input)
 
@@ -128,9 +129,10 @@ if st.session_state["authentication_status"]:
                             response_placeholder.markdown(full_response + "▌")
 
             response_placeholder.markdown(full_response)
+            # AIの返答を履歴に追加
             st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-            # スプレッドシートへログ保存
+            # ログ保存
             try:
                 now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S')
                 existing_data = conn.read(spreadsheet=st.secrets["spreadsheet_url"], ttl=0)
@@ -141,13 +143,16 @@ if st.session_state["authentication_status"]:
                 updated_df = pd.concat([existing_data, new_row], ignore_index=True)
                 conn.update(spreadsheet=st.secrets["spreadsheet_url"], data=updated_df)
             except Exception as e:
-                st.warning(f"ログ保存に失敗しましたが、対話は継続できます: {e}")
+                st.warning(f"ログ保存失敗: {e}")
 
-            # ★修正ポイント: 応答が空でないことを確認してから音声生成
+            # 音声生成
             if len(full_response.strip()) > 0:
                 with st.spinner('音声を生成中...'):
                     tts_res = client.audio.speech.create(model="tts-1", voice="alloy", input=full_response)
                     st.audio(io.BytesIO(tts_res.content), format="audio/mp3", autoplay=True)
+            
+            # ★重要: メッセージを保存した後に再描画して、履歴ループに確実に乗せる
+            st.rerun()
 
 elif st.session_state["authentication_status"] is False:
     st.error('ユーザー名またはパスワードが間違っています')
