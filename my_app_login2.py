@@ -38,13 +38,14 @@ if st.session_state["authentication_status"]:
         st.write(f"ようこそ、{name} さん")
         authenticator.logout('ログアウト', 'sidebar')
 
-    st.title("音声対応AIアシスタント")
+    st.title("音声対応AIアシスタント 0")
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "conversation_id" not in st.session_state:
         st.session_state.conversation_id = ""
 
+    # --- 入力 UI ---
     st.write("話しかけてください：")
     audio = mic_recorder(start_prompt="⏺️ 録音開始", stop_prompt="⏹️ 停止", key='recorder')
     user_input = None
@@ -63,10 +64,12 @@ if st.session_state["authentication_status"]:
     if chat_input:
         user_input = chat_input
 
+    # 履歴の表示
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
+    # --- メイン処理 ---
     if user_input:
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"):
@@ -82,23 +85,19 @@ if st.session_state["authentication_status"]:
                 "Content-Type": "application/json"
             }
             
-            # --- 【重要】Chatflow 向けのリクエスト構成 ---
-            # 多くのChatflowでは inputs に変数を渡す必要があります。
-            # もしDify側で開始ノードの入力変数を 'sys_query' などにしている場合は
-            # "inputs": {"sys_query": user_input} のように書き換えてください。
+            # --- エラー回避のためのリクエスト構成 ---
             data = {
                 "inputs": {}, 
-                "query": user_input, # Chatbot APIとして動作させる場合
+                "query": user_input,
                 "response_mode": "streaming",
-                "user": username
+                "user": username,
+                "files": [] # 400 Bad Request (file mapping) 対策
             }
             
-            # 会話の継続性を維持
             if st.session_state.conversation_id:
                 data["conversation_id"] = st.session_state.conversation_id
 
             try:
-                # タイムアウトを設定してリクエスト
                 response = requests.post(
                     "https://api.dify.ai/v1/chat-messages", 
                     headers=headers, 
@@ -107,33 +106,42 @@ if st.session_state["authentication_status"]:
                     timeout=60
                 )
                 
-                # ここで 400 エラーの内容を詳細に表示させる
                 if response.status_code != 200:
                     st.error(f"Dify API Error {response.status_code}: {response.text}")
                 else:
                     for line in response.iter_lines():
-                        if line:
-                            decoded_line = line.decode('utf-8').replace('data: ', '')
-                            try:
-                                chunk = json.loads(decoded_line)
-                                event = chunk.get("event")
+                        if not line:
+                            continue
+                        
+                        decoded_line = line.decode('utf-8')
+                        if not decoded_line.startswith('data: '):
+                            continue
+                        
+                        try:
+                            # 'data: ' の後の文字列を抽出
+                            json_str = decoded_line[6:]
+                            chunk = json.loads(json_str)
+                            event = chunk.get("event")
 
-                                if "conversation_id" in chunk:
-                                    st.session_state.conversation_id = chunk["conversation_id"]
+                            if "conversation_id" in chunk:
+                                st.session_state.conversation_id = chunk["conversation_id"]
 
-                                # Chatflowのテキスト抽出
-                                if event in ["message", "text_chunk"]:
-                                    # event="message" は Chatbot 用、"text_chunk" は Workflow/Chatflow用
-                                    content = chunk.get("answer", "") or chunk.get("data", {}).get("text", "")
-                                    full_response += content
-                                    response_placeholder.markdown(full_response + "▌")
+                            # Chatflow / Chatbot 両方のイベントに対応
+                            if event in ["message", "text_chunk"]:
+                                content = ""
+                                if event == "message":
+                                    content = chunk.get("answer", "")
+                                elif event == "text_chunk":
+                                    content = chunk.get("data", {}).get("text", "")
                                 
-                                elif event == "message_end":
-                                    # 最終的な回答が別に含まれる場合があるため念のため確認
-                                    metadata = chunk.get("metadata", {})
+                                full_response += content
+                                response_placeholder.markdown(full_response + "▌")
+                            
+                            elif event == "error":
+                                st.error(f"Dify内部エラー: {chunk.get('message')}")
 
-                            except json.JSONDecodeError:
-                                continue
+                        except json.JSONDecodeError:
+                            continue
 
                     response_placeholder.markdown(full_response)
                     if full_response:
@@ -142,8 +150,9 @@ if st.session_state["authentication_status"]:
             except Exception as e:
                 st.error(f"接続エラー: {e}")
 
-            # --- ログ保存と音声出力 (変更なし) ---
+            # --- ログ保存と音声出力 ---
             if full_response:
+                # ログ保存 (Google Sheets)
                 try:
                     now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S')
                     existing_data = conn.read(spreadsheet=st.secrets["spreadsheet_url"], ttl=0)
@@ -153,14 +162,25 @@ if st.session_state["authentication_status"]:
                     }])
                     updated_df = pd.concat([existing_data, new_row_df], ignore_index=True)
                     conn.update(spreadsheet=st.secrets["spreadsheet_url"], data=updated_df)
-                except:
-                    pass
+                except Exception as e:
+                    print(f"Log Error: {e}")
 
+                # 音声生成
                 with st.spinner('音声を生成中...'):
                     try:
-                        tts_res = client.audio.speech.create(model="tts-1", voice="alloy", input=full_response[:4096])
+                        tts_res = client.audio.speech.create(
+                            model="tts-1", 
+                            voice="alloy", 
+                            input=full_response[:4096]
+                        )
                         st.audio(io.BytesIO(tts_res.content), format="audio/mp3", autoplay=True)
                     except Exception as e:
-                        st.error(f"音声エラー: {e}")
+                        st.error(f"音声生成エラー: {e}")
             else:
-                st.warning("AIからの回答が空でした。")
+                if response.status_code == 200:
+                    st.warning("AIからの回答が空でした。Difyの出力設定を確認してください。")
+
+elif st.session_state["authentication_status"] is False:
+    st.error('ユーザー名またはパスワードが間違っています')
+elif st.session_state["authentication_status"] is None:
+    st.warning('ユーザー名とパスワードを入力してください')
