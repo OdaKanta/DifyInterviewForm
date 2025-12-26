@@ -13,7 +13,7 @@ headers = {
     "Content-Type": "application/json",
 }
 
-st.title("Dify Streaming Test")
+st.title("Dify Streaming Test2")
 
 # セッション初期化
 if "messages" not in st.session_state:
