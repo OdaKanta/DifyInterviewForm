@@ -5,10 +5,9 @@ import json
 from openai import OpenAI
 from streamlit_mic_recorder import mic_recorder
 import io
-import yaml
-from streamlit_gsheets import GSheetsConnection
 import datetime
 import pandas as pd
+from streamlit_gsheets import GSheetsConnection
 
 # --- 1. ユーザー情報の設定 ---
 names = ["田中 太郎", "佐藤 花子", "工大 太郎"]
@@ -38,7 +37,7 @@ if st.session_state["authentication_status"]:
         st.write(f"ようこそ、{name} さん")
         authenticator.logout('ログアウト', 'sidebar')
 
-    st.title("音声対応AIアシスタント 0")
+    st.title("音声対応AIアシスタント 1")
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -85,15 +84,16 @@ if st.session_state["authentication_status"]:
                 "Content-Type": "application/json"
             }
             
-            # --- エラー回避のためのリクエスト構成 ---
+            # --- リクエストデータの構築 ---
+            # filesをあえて含めず、Difyの自動判定に任せます
             data = {
                 "inputs": {}, 
                 "query": user_input,
                 "response_mode": "streaming",
-                "user": username,
-                "files": [] # 400 Bad Request (file mapping) 対策
+                "user": username
             }
             
+            # 会話IDがある場合は追加
             if st.session_state.conversation_id:
                 data["conversation_id"] = st.session_state.conversation_id
 
@@ -113,32 +113,33 @@ if st.session_state["authentication_status"]:
                         if not line:
                             continue
                         
-                        decoded_line = line.decode('utf-8')
-                        if not decoded_line.startswith('data: '):
+                        decoded_line = line.decode('utf-8').strip()
+                        if not decoded_line.startswith('data:'):
                             continue
                         
                         try:
-                            # 'data: ' の後の文字列を抽出
-                            json_str = decoded_line[6:]
-                            chunk = json.loads(json_str)
+                            # 'data:' 以降のJSON部分を抽出
+                            raw_json = decoded_line[5:].strip()
+                            chunk = json.loads(raw_json)
                             event = chunk.get("event")
 
+                            # 会話IDの保存
                             if "conversation_id" in chunk:
                                 st.session_state.conversation_id = chunk["conversation_id"]
 
-                            # Chatflow / Chatbot 両方のイベントに対応
-                            if event in ["message", "text_chunk"]:
-                                content = ""
-                                if event == "message":
-                                    content = chunk.get("answer", "")
-                                elif event == "text_chunk":
-                                    content = chunk.get("data", {}).get("text", "")
-                                
+                            # Chatflow / Chatbot 両方のイベントから回答を抽出
+                            if event == "message":
+                                content = chunk.get("answer", "")
                                 full_response += content
-                                response_placeholder.markdown(full_response + "▌")
+                            elif event == "text_chunk":
+                                content = chunk.get("data", {}).get("text", "")
+                                full_response += content
                             
-                            elif event == "error":
+                            response_placeholder.markdown(full_response + "▌")
+                            
+                            if event == "error":
                                 st.error(f"Dify内部エラー: {chunk.get('message')}")
+                                break
 
                         except json.JSONDecodeError:
                             continue
@@ -162,8 +163,8 @@ if st.session_state["authentication_status"]:
                     }])
                     updated_df = pd.concat([existing_data, new_row_df], ignore_index=True)
                     conn.update(spreadsheet=st.secrets["spreadsheet_url"], data=updated_df)
-                except Exception as e:
-                    print(f"Log Error: {e}")
+                except:
+                    pass
 
                 # 音声生成
                 with st.spinner('音声を生成中...'):
@@ -171,14 +172,14 @@ if st.session_state["authentication_status"]:
                         tts_res = client.audio.speech.create(
                             model="tts-1", 
                             voice="alloy", 
-                            input=full_response[:4096]
+                            input=full_response[:4000] # 安全のため少し短く
                         )
                         st.audio(io.BytesIO(tts_res.content), format="audio/mp3", autoplay=True)
                     except Exception as e:
                         st.error(f"音声生成エラー: {e}")
             else:
                 if response.status_code == 200:
-                    st.warning("AIからの回答が空でした。Difyの出力設定を確認してください。")
+                    st.warning("AIからの回答が空でした。Difyのワークフロー内で「回答」や「終了」ノードが正しく設定されているか確認してください。")
 
 elif st.session_state["authentication_status"] is False:
     st.error('ユーザー名またはパスワードが間違っています')
