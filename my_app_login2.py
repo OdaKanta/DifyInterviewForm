@@ -3,7 +3,7 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import requests
 from openai import OpenAI
-from datetime import datetime
+import datetime
 import uuid
 
 # --- 初期設定 ---
