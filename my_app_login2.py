@@ -39,21 +39,22 @@ if "user_uuid" not in st.session_state:
     st.session_state.user_uuid = str(uuid.uuid4())
 
 # --- ヘルパー関数 ---
-
 def save_log(user_input, ai_response):
-    """Googleスプレッドシートにログを保存"""
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    new_data = pd.DataFrame([{
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "user_id": st.session_state.user_uuid,
-        "user_input": user_input,
-        "ai_response": ai_response,
-        "conversation_id": st.session_state.conversation_id
-    }])
-    # 既存データの取得と結合
-    existing_data = conn.read()
-    updated_df = pd.concat([existing_data, new_data], ignore_index=True)
-    conn.update(data=updated_df)
+    try:
+        now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S')
+        new_row = {
+            "date": now,
+            "user_id": st.session_state["username"],
+            "user_input": user_input,
+            "ai_response": ai_response,
+            "conversation_id": st.session_state.conversation_id
+        }
+        # 既存データ読み込みと更新
+        existing_data = conn.read(spreadsheet=st.secrets["spreadsheet_url"], ttl=0)
+        updated_df = pd.concat([existing_data, pd.DataFrame([new_row])], ignore_index=True)
+        conn.update(spreadsheet=st.secrets["spreadsheet_url"], data=updated_df)
+    except Exception as e:
+        st.error(f"ログ保存失敗: {e}")
 
 def transcribe_audio(audio_file):
     """Whisper APIで文字起こし"""
