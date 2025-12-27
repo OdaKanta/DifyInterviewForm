@@ -74,7 +74,7 @@ def text_to_speech(text):
 
 def call_dify(query):
     """Dify Chatflow APIの呼び出し"""
-    url = f"{st.secrets['DIFY_BASE_URL']}/chat-messages"
+    url = "https://api.dify.ai/v1/chat-messages"
     headers = {
         "Authorization": f"Bearer {st.secrets['DIFY_API_KEY']}",
         "Content-Type": "application/json"
