@@ -15,8 +15,6 @@ def check_password():
     def password_entered():
         if st.session_state["username"] == "admin" and st.session_state["password"] == "password123":
             st.session_state["password_correct"] = True
-            del st.session_state["password"]
-            del st.session_state["username"]
         else:
             st.session_state["password_correct"] = False
 
