@@ -73,7 +73,8 @@ if st.session_state["authentication_status"]:
                 "inputs": {},  # ワークフローの開始ノードで変数が必要な場合はここに入れる
                 "query": "開始", # もし開始トリガーがあるならその文言
                 "response_mode": "blocking",
-                "user": st.session_state["username"]
+                "user": st.session_state["username"],
+                "files": []
             }
             try:
                 res = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=init_data)
@@ -135,7 +136,8 @@ if st.session_state["authentication_status"]:
                 "query": user_input,
                 "response_mode": "streaming",
                 "user": st.session_state["username"],
-                "conversation_id": st.session_state.conversation_id
+                "conversation_id": st.session_state.conversation_id,
+                "files": []
             }
             
             response = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=payload, stream=True)
