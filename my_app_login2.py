@@ -70,26 +70,34 @@ if st.session_state["authentication_status"]:
     if not st.session_state.initialized:
         with st.spinner('システム接続中...'):
             init_data = {
-                "inputs": {},
-                "query": "hello",  # Dify側の開始トリガーに合わせて変更可
+                "inputs": {},  # ワークフローの開始ノードで変数が必要な場合はここに入れる
+                "query": "開始", # もし開始トリガーがあるならその文言
                 "response_mode": "blocking",
                 "user": st.session_state["username"]
             }
             try:
                 res = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=init_data)
-                res.raise_for_status()
+                
+                # エラー内容を詳細に表示するためのデバッグ処理
+                if res.status_code != 200:
+                    st.error(f"Dify APIエラー: {res.status_code} - {res.text}")
+                    st.stop()
+    
                 res_json = res.json()
-                msg = res_json.get("answer", "こんにちは！何かお手伝いしましょうか？")
+                # Chatflowの場合、answerが空の場合があるため
+                msg = res_json.get("answer") or "接続されました。何かお手伝いしましょうか？"
+                
                 st.session_state.conversation_id = res_json.get("conversation_id", "")
                 st.session_state.messages.append({"role": "assistant", "content": msg})
                 st.session_state.initialized = True
                 
-                # 初回挨拶の音声再生
+                # 音声出力
                 tts = client.audio.speech.create(model="tts-1", voice="alloy", input=msg)
                 st.audio(io.BytesIO(tts.content), format="audio/mp3", autoplay=True)
                 st.rerun()
             except Exception as e:
-                st.error(f"初期化エラー: {e}")
+                st.error(f"接続失敗: {e}")
+                st.stop()
 
     # --- 6. チャットUIの表示 ---
     for message in st.session_state.messages:
