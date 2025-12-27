@@ -86,7 +86,6 @@ def text_to_speech(text):
     return response.content
 
 def call_dify(query):
-    """Dify Chatflow APIの呼び出し"""
     url = "https://api.dify.ai/v1/chat-messages"
     headers = {
         "Authorization": f"Bearer {st.secrets['DIFY_API_KEY']}",
@@ -99,10 +98,20 @@ def call_dify(query):
         "conversation_id": st.session_state.conversation_id,
         "user": st.session_state.user_uuid
     }
+
     response = requests.post(url, headers=headers, json=payload)
+
+    # 👇 追加（超重要）
+    st.write("Dify raw response:", response.json())
+
+    if response.status_code != 200:
+        return f"HTTPエラー: {response.status_code}"
+
     data = response.json()
     st.session_state.conversation_id = data.get("conversation_id", "")
+
     return data.get("answer", "エラーが発生しました。")
+
 
 # --- UI レイアウト ---
 st.title("Dify AI Assistant 🎙️")
