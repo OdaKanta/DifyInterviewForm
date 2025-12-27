@@ -13,17 +13,29 @@ client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 # --- 認証機能 (シンプルなサンプル) ---
 def check_password():
     def password_entered():
-        if st.session_state["username"] == "admin" and st.session_state["password"] == "password123":
+        if (
+            st.session_state["username"] == "admin"
+            and st.session_state["password"] == "password123"
+        ):
             st.session_state["password_correct"] = True
         else:
             st.session_state["password_correct"] = False
 
-    if "password_correct" not in st.session_state:
+    if not st.session_state["password_correct"]:
         st.text_input("Username", key="username")
         st.text_input("Password", type="password", key="password")
         st.button("Login", on_click=password_entered)
         return False
-    return st.session_state["password_correct"]
+
+    return True
+
+# --- セッション状態の初期化（最優先） ---
+if "username" not in st.session_state:
+    st.session_state["username"] = ""
+if "password" not in st.session_state:
+    st.session_state["password"] = ""
+if "password_correct" not in st.session_state:
+    st.session_state["password_correct"] = False
 
 if not check_password():
     st.stop()
@@ -35,6 +47,8 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "user_uuid" not in st.session_state:
     st.session_state.user_uuid = str(uuid.uuid4())
+
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- ヘルパー関数 ---
 def save_log(user_input, ai_response):
