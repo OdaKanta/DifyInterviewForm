@@ -38,7 +38,7 @@ if st.session_state["authentication_status"]:
         st.write(f"ようこそ、{name} さん")
         authenticator.logout('ログアウト', 'sidebar')
 
-    st.title("音声対応AIアシスタント 1")
+    st.title("音声対応AIアシスタント 01")
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
