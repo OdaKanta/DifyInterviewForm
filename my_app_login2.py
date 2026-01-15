@@ -140,11 +140,17 @@ if st.session_state["authentication_status"]:
 
             # --- 音声出力 (OpenAI TTS) ---
             with st.spinner("音声を生成中..."):
+                # tts_response = client.audio.speech.create(
+                #     model="gpt-4o-mini-tts",
+                #     voice="alloy",
+                #     input=full_response[:500]
+                # )
                 tts_response = client.audio.speech.create(
                     model="gpt-4o-mini-tts",
                     voice="alloy",
-                    input=full_response[:500]
+                    input="こんにちは"
                 )
+
             
                 st.audio(
                     io.BytesIO(tts_response.content),
