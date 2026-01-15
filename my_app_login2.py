@@ -140,7 +140,9 @@ if st.session_state["authentication_status"]:
 
             # --- 音声出力 (OpenAI TTS) ---
             with st.spinner("音声を生成中..."):
-                if safe_text.strip() != "":
+                safe_text = full_response[:500]  # 文字数制限
+                safe_text = safe_text.strip()    # 空白や改行を削除
+                if safe_text != "":
                     tts_response = client.audio.speech.create(
                         model="gpt-4o-mini-tts",
                         voice="alloy",
