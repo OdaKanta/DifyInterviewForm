@@ -139,10 +139,15 @@ if st.session_state["authentication_status"]:
                 st.error(f"ログ保存エラー: {e}")
 
             # --- 音声出力 (OpenAI TTS) ---
-            with st.spinner('音声を生成中...'):
+            with st.spinner("音声を生成中..."):
                 response = client.responses.create(
                     model="gpt-4o-mini-tts",
-                    input=full_response[:500],  # 念のため制限
+                    input=[
+                        {
+                            "role": "user",
+                            "content": full_response[:500]
+                        }
+                    ],
                     audio={
                         "voice": "alloy",
                         "format": "mp3"
