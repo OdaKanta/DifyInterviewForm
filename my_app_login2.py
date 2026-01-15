@@ -147,7 +147,7 @@ if st.session_state["authentication_status"]:
                 # )
                 tts_response = client.audio.speech.create(
                     model="gpt-4o-mini-tts",
-                    voice="aria",
+                    voice="alloy",
                     input="こんにちは"
                 )
 
