@@ -102,7 +102,10 @@ elif st.session_state["authentication_status"]:
             for line in response.iter_lines():
                 if not line:
                     continue
-            
+                
+                decoded_line = line.decode("utf-8")
+                st.write("RAW:", repr(decoded_line))
+    
                 decoded_line = line.decode("utf-8")
             
                 if not decoded_line.startswith("data: "):
