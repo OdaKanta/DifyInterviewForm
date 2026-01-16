@@ -4,6 +4,7 @@ import os
 import datetime
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
+import json
 
 # --- スプレッドシート接続 ---
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -65,13 +66,21 @@ def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="st
     url = f"{BASE_URL}/chat-messages"
     inputs = {}
     
-    # ファイルIDがある場合（初回）のみinputsにセット
+    # --- ファイルデータの構築 ---
+    # ここで「リストにするか」「辞書にするか」を切り替えてテストできます
     if uploaded_file_id:
-        inputs[FILE_VARIABLE_KEY] = [{
-            "type": "document",
+        file_payload = {
+            "type": "document",  # YAMLで "document" と定義されているため
             "transfer_method": "local_file",
             "upload_file_id": uploaded_file_id
-        }]
+        }
+        
+        # パターンA: リストで囲む（前回の提案）
+        # inputs[FILE_VARIABLE_KEY] = [file_payload]
+
+        # パターンB: 辞書のまま送る（最初の状態）
+        # もしリストでダメなら、ここをコメントアウトを外して試してください
+        inputs[FILE_VARIABLE_KEY] = file_payload 
 
     payload = {
         "inputs": inputs,
@@ -80,20 +89,35 @@ def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="st
         "conversation_id": conversation_id,
         "user": user_id,
     }
+    
+    # --- 【デバッグ】送信するJSONをターミナルに表示 ---
+    print("\n" + "="*30)
+    print("🚀 [DEBUG] Sending Payload to Dify:")
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    print("="*30 + "\n")
+    # -----------------------------------------------
 
     try:
         response = requests.post(url, headers=headers, json=payload)
         
-        # エラーがある場合は詳細を表示して例外を投げる
+        # エラー時の詳細表示
         if response.status_code != 200:
             st.error(f"APIエラー: {response.status_code}")
-            st.code(response.text) # Difyからの生のエラーメッセージを表示
+            
+            # レスポンスの中身を表示
+            try:
+                error_json = response.json()
+                st.code(json.dumps(error_json, indent=2, ensure_ascii=False), language="json")
+                print("❌ [DEBUG] Error Response:")
+                print(json.dumps(error_json, indent=2, ensure_ascii=False))
+            except:
+                st.code(response.text)
+                print("❌ [DEBUG] Error Response (Text):", response.text)
             
         response.raise_for_status()
         return response.json()
         
     except Exception as e:
-        # すでに上で表示しているのでここではシンプルな表示にとどめるか、何もしない
         return None
 
 # --- ログ保存機能 ---
