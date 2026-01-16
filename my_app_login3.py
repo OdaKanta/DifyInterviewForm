@@ -58,17 +58,12 @@ def upload_local_file_to_dify(file_path, user_id):
             return None
 
 def send_chat_message(query, conversation_id, file_id_to_send, user_id):
-    """
-    チャットメッセージを送信する
-    重要な変更点: file_id_to_send があれば、毎回必ず inputs にセットする
-    """
+    """チャットメッセージを送信する"""
     url = f"{BASE_URL}/chat-messages"
     inputs = {}
     
-    # --- 【重要】毎回ファイル情報を送る ---
+    # 毎回ファイル情報を送る
     if file_id_to_send:
-        # リスト[]に入れず、単一の辞書として送る
-        # type は "document" (YAML定義に合わせる)
         inputs[FILE_VARIABLE_KEY] = {
             "type": "document", 
             "transfer_method": "local_file",
@@ -86,7 +81,6 @@ def send_chat_message(query, conversation_id, file_id_to_send, user_id):
     try:
         response = requests.post(url, headers=headers, json=payload)
         
-        # エラーハンドリング
         if response.status_code != 200:
             st.sidebar.error(f"APIエラー: {response.status_code}")
             try:
@@ -102,17 +96,23 @@ def send_chat_message(query, conversation_id, file_id_to_send, user_id):
         return None
 
 # --- ログ保存機能 ---
-def save_log_to_sheet(username, user_input, full_response, conversation_id):
-    """スプレッドシートへのログ保存"""
+def save_log_to_sheet(username, user_input, bot_question, conversation_id):
+    """
+    会話ログをGoogleスプレッドシートに保存する
+    引数 bot_question: ユーザーの回答に対する「問い」の内容
+    """
     try:
         now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S')
         existing_data = conn.read(spreadsheet=st.secrets["spreadsheet_url"], ttl=0)
         
+        # スプレッドシートの列名に合わせてデータを構築
+        # ai_response列には、これまでは「応答」が入っていましたが、
+        # 今後は論理的なペアとなる「質問（Question）」が入ります。
         new_row = pd.DataFrame([{
             "date": now,
             "user_id": username,
-            "user_input": user_input,
-            "ai_response": full_response,
+            "user_input": user_input,       # ユーザーの回答 (Answer)
+            "ai_response": bot_question,    # ボットの質問 (Question)
             "conversation_id": conversation_id
         }])
         
@@ -141,34 +141,35 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "conversation_id" not in st.session_state:
     st.session_state.conversation_id = ""
-# 【追加】アップロードしたファイルIDを保持する変数
 if "current_file_id" not in st.session_state:
     st.session_state.current_file_id = None
+# 【追加】直前のボットの質問を保持する変数
+if "last_bot_message" not in st.session_state:
+    st.session_state.last_bot_message = ""
 
-# --- 緊急リセットボタン（IDが壊れたとき用） ---
+# --- 緊急リセットボタン ---
 if st.sidebar.button("⚠️ 会話をリセット"):
     st.session_state.conversation_id = ""
     st.session_state.messages = []
     st.session_state.current_file_id = None
+    st.session_state.last_bot_message = ""
     st.rerun()
 
 # 3. 初回起動時の自動アップロード & 開始
 if not st.session_state.conversation_id:
     with st.spinner("インタビュアーを準備中...（資料を読み込んでいます）"):
-        # ファイルをアップロードしてIDを取得
         if not st.session_state.current_file_id:
             file_id = upload_local_file_to_dify(FIXED_FILE_PATH, current_user)
             if file_id:
-                st.session_state.current_file_id = file_id # IDを保存
+                st.session_state.current_file_id = file_id
             else:
                 st.error("ファイルのアップロードに失敗しました。")
                 st.stop()
         
-        # 保存したIDを使ってチャット開始
         initial_res = send_chat_message(
             query="授業内容について学んだことを教えてください。", 
             conversation_id="",
-            file_id_to_send=st.session_state.current_file_id, # 保存したIDを使用
+            file_id_to_send=st.session_state.current_file_id,
             user_id=current_user
         )
         
@@ -176,6 +177,10 @@ if not st.session_state.conversation_id:
             st.session_state.conversation_id = initial_res.get('conversation_id')
             welcome_msg = initial_res.get('answer', '')
             st.session_state.messages.append({"role": "assistant", "content": welcome_msg})
+            
+            # 【重要】最初の質問を「直前のボットメッセージ」として保存
+            st.session_state.last_bot_message = welcome_msg 
+            
             st.rerun()
 
 # 4. チャット履歴の表示
@@ -185,29 +190,34 @@ for msg in st.session_state.messages:
 
 # 5. ユーザー入力処理
 if prompt := st.chat_input("ここに入力..."):
+    # ユーザーの回答を表示
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.write(prompt)
 
     with st.spinner("考え中..."):
-        # 2回目以降も、保存しておいた file_id を必ず送る
         response = send_chat_message(
             query=prompt,
             conversation_id=st.session_state.conversation_id,
-            file_id_to_send=st.session_state.current_file_id, # 【重要】ここでも送る
+            file_id_to_send=st.session_state.current_file_id,
             user_id=current_user
         )
         
         if response:
-            ans = response.get('answer', '')
-            st.session_state.messages.append({"role": "assistant", "content": ans})
+            next_question = response.get('answer', '')
+            st.session_state.messages.append({"role": "assistant", "content": next_question})
             with st.chat_message("assistant"):
-                st.write(ans)
+                st.write(next_question)
             
-            # ログ保存
+            # 【重要変更】ログ保存：
+            # 「ユーザーの今回の入力(prompt)」と
+            # 「前回ボットが発した質問(last_bot_message)」をペアにして保存
             save_log_to_sheet(
                 username=current_user,
                 user_input=prompt,
-                full_response=ans,
+                bot_question=st.session_state.last_bot_message, 
                 conversation_id=st.session_state.conversation_id
             )
+            
+            # 保存が終わったら、次回のペアリングのために「直前の質問」を更新しておく
+            st.session_state.last_bot_message = next_question
