@@ -132,7 +132,7 @@ def text_to_speech_autoplay(text):
 # メイン処理
 # ==========================================
 st.set_page_config(page_title="講義の復習", page_icon="🤖")
-st.title("🤖 講義振り返りインタビュアー")
+st.title("🤖 講義振り返りインタビュアー位置調整")
 
 login()
 current_user = st.session_state.username
@@ -201,21 +201,20 @@ with chat_container:
     if st.session_state.audio_html:
         st.markdown(st.session_state.audio_html, unsafe_allow_html=True)
 
-# 5. 入力エリア（横並びレイアウト）
+# 5. 入力エリア（横並びレイアウト・位置調整版）
 st.divider()
 
 # 入力が確定したときに呼ばれるコールバック関数
 def submit_text():
     st.session_state.input_to_process = st.session_state.temp_user_input
-    st.session_state.temp_user_input = "" # 入力欄をクリア
+    st.session_state.temp_user_input = "" 
 
 # カラム作成: テキストエリア(6) : マイク(1)
-# vertical_alignment="bottom" で下揃えにして、高さのズレを防ぐ
+# vertical_alignment="bottom" だけでは合わない場合があるため "center" に変更してみる手もありますが、
+# ここではあえて bottom のまま、スペーサーで微調整します。
 col_input, col_mic = st.columns([6, 1], vertical_alignment="bottom")
 
 with col_input:
-    # st.chat_inputの代わりにtext_inputを使用
-    # label_visibility="collapsed" でラベルを消してスッキリさせる
     st.text_input(
         label="メッセージ入力",
         key="temp_user_input",
@@ -225,7 +224,11 @@ with col_input:
     )
 
 with col_mic:
-    # マイクボタンをここに配置
+    # 【ここが修正点】
+    # マイクボタンを強制的に下に押し下げるための「透明な箱」を置きます。
+    # "margin-top: 8px;" の数字を増減させて、好みの位置に合わせてください。
+    st.markdown('<div style="margin-top: 8px;"></div>', unsafe_allow_html=True)
+    
     audio = mic_recorder(
         start_prompt="🎤", 
         stop_prompt="⏹️", 
