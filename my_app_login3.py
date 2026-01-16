@@ -75,16 +75,18 @@ def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="st
         
         # --- ファイル変数の構築 ---
         if uploaded_file_id:
-            # 【重要】Difyの仕様に合わせて [リスト] かつ "file" 型にする
+            # 【重要修正 1】 リスト [ ] を外す（単一オブジェクトにする）
+            # 【重要修正 2】 type を "document" にする（YAMLの定義に合わせる）
             file_structure = {
-                "type": "file",           # document ではなく file
+                "type": "document",           # YAMLで allowed_file_types: [document] となっているため
                 "transfer_method": "local_file",
                 "upload_file_id": uploaded_file_id
             }
-            # リストで包む
-            inputs[FILE_VARIABLE_KEY] = [file_structure]
             
-            st.sidebar.info("✅ ファイル変数をセットしました (List形式)")
+            # リストに入れず、そのまま代入する
+            inputs[FILE_VARIABLE_KEY] = file_structure
+            
+            st.sidebar.info("✅ ファイル変数をセットしました (Dict形式/type:document)")
         else:
             st.sidebar.write("ℹ️ ファイルIDがないため、ファイル変数は空で送ります")
 
@@ -109,25 +111,15 @@ def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="st
             return response.json()
         else:
             st.sidebar.error(f"❌ 失敗: {response.status_code}")
-            # エラー内容を詳細表示
             try:
-                err_json = response.json()
-                st.sidebar.json(err_json)
-                
-                # 特定のエラーに対するヒント
-                if err_json.get("code") == "invalid_param":
-                    st.sidebar.error("ヒント: パラメータの構造がDifyの期待と違います。inputsの中身を確認してください。")
+                st.sidebar.json(response.json())
             except:
                 st.sidebar.text(response.text)
-            
-            # エラーでも処理を継続させるためNoneを返すのではなく例外を投げる
             response.raise_for_status()
             
     except Exception as e:
-        # ここですべての「見えないエラー」を捕まえて表示します
         st.error(f"⚠️ 内部処理エラー発生: {e}")
         st.sidebar.error(f"例外詳細: {e}")
-        st.sidebar.text(traceback.format_exc()) # どこで落ちたか行番号を表示
         return None
 
 # --- ログ保存機能 ---
