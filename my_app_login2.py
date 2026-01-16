@@ -91,14 +91,13 @@ elif st.session_state["authentication_status"]:
 
             DIFY_KEY = st.secrets["DIFY_API_KEY"]
             headers = {"Authorization": f"Bearer {DIFY_KEY}", "Content-Type": "application/json"}
-            files = [
-                {
+            files = {
+                "material": {  # これは Dify 側で作った Input フィールド名に合わせる
                     "type": "file",
                     "transfer_method": "remote_url",
                     "url": "https://odakanta.github.io/DifyInterviewForm/CV11.pdf"
                 }
-            ]
-            
+            }
             data = {
                 "inputs": {},
                 "query": user_input,
