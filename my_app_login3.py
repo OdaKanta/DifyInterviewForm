@@ -1,53 +1,52 @@
 import streamlit as st
 import requests
-import json
+import os
 
 # --- 設定 ---
 API_KEY = st.secrets["DIFY_API_KEY"]
-BASE_URL = "https://api.dify.ai/v1"  # オンプレ版の場合はそのURL
-# 開始ノードで定義されている変数名（YMLの "variable: material" に対応）
-FILE_VARIABLE_KEY = "material" 
+BASE_URL = "https://api.dify.ai/v1"
+FILE_VARIABLE_KEY = "material"
 
-# --- ヘッダー設定 ---
+# サーバー側にある固定ファイルのパス
+FIXED_FILE_PATH = "CV11.pdf"
+
 headers = {
     "Authorization": f"Bearer {API_KEY}"
 }
 
-def upload_file_to_dify(uploaded_file, user_id):
+def upload_local_file_to_dify(file_path, user_id):
     """
-    ファイルをDifyにアップロードし、IDを取得する関数
+    ローカル（サーバー上）のファイルを読み込んでDifyに送信する
     """
-    url = f"{BASE_URL}/files/upload"
-    
-    # MIMEタイプに応じたファイル送信準備
-    files = {
-        'file': (uploaded_file.name, uploaded_file, uploaded_file.type)
-    }
-    data = {
-        'user': user_id
-    }
-    
-    try:
-        response = requests.post(url, headers=headers, files=files, data=data)
-        response.raise_for_status()
-        return response.json().get('id')
-    except Exception as e:
-        st.error(f"ファイルアップロードエラー: {e}")
+    if not os.path.exists(file_path):
+        st.error(f"ファイルが見つかりません: {file_path}")
         return None
 
-def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="streamlit_user"):
-    """
-    Difyにメッセージを送信する関数
-    """
-    url = f"{BASE_URL}/chat-messages"
+    url = f"{BASE_URL}/files/upload"
     
-    # inputs の構築
+    # バイナリモードでファイルを開く
+    with open(file_path, "rb") as f:
+        files = {
+            'file': (os.path.basename(file_path), f, 'application/pdf') # ファイル名とMIMEタイプを指定
+        }
+        data = {'user': user_id}
+        
+        try:
+            response = requests.post(url, headers=headers, files=files, data=data)
+            response.raise_for_status()
+            return response.json().get('id')
+        except Exception as e:
+            st.error(f"内部アップロードエラー: {e}")
+            return None
+
+def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="streamlit_student"):
+    url = f"{BASE_URL}/chat-messages"
     inputs = {}
     
-    # 初回（ファイルIDがある場合）のみ、inputsにファイル情報をセットする
+    # ファイルIDがある場合（初回）のみinputsにセット
     if uploaded_file_id:
         inputs[FILE_VARIABLE_KEY] = {
-            "type": "document",            # YMLの設定に合わせる（image/document/videoなど）
+            "type": "document",
             "transfer_method": "local_file",
             "upload_file_id": uploaded_file_id
         }
@@ -55,7 +54,7 @@ def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="st
     payload = {
         "inputs": inputs,
         "query": query,
-        "response_mode": "blocking", # ストリーミングしたい場合は 'streaming'
+        "response_mode": "blocking",
         "conversation_id": conversation_id,
         "user": user_id,
     }
@@ -65,69 +64,62 @@ def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="st
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        st.error(f"APIエラー: {e}")
+        st.error(f"API通信エラー: {e}")
         return None
 
-# --- Streamlit UI ---
+# --- UI構築 ---
+st.set_page_config(page_title="講義の復習", page_icon="🤖")
 st.title("🤖 講義振り返りインタビュアー")
 
-# セッション状態の初期化
-if "conversation_id" not in st.session_state:
-    st.session_state.conversation_id = ""
-if "file_uploaded" not in st.session_state:
-    st.session_state.file_uploaded = False
+# セッション管理
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "conversation_id" not in st.session_state:
+    st.session_state.conversation_id = ""
 
-# サイドバーでファイルアップロード
-st.sidebar.header("講義資料の提出")
-uploaded_file = st.sidebar.file_uploader("講義資料(PDF)をアップロードしてください", type=["pdf"])
-
-if uploaded_file and not st.session_state.file_uploaded:
-    with st.spinner("資料を読み込んでいます..."):
-        # 1. Difyへファイルをアップロード
-        file_id = upload_file_to_dify(uploaded_file, "streamlit_user")
+# --- 自動初期化プロセス ---
+# 会話IDがまだない（＝アクセス直後）なら、裏でファイルを送って会話を開始する
+if not st.session_state.conversation_id:
+    with st.spinner("インタビュアーを準備中...（資料を読み込んでいます）"):
+        # 1. 固定ファイルをアップロード
+        # ユーザーIDはセッションごとにユニークにするのが理想ですが、今回は固定で例示
+        file_id = upload_local_file_to_dify(FIXED_FILE_PATH, "guest_user")
         
         if file_id:
-            # 2. アップロード成功後、Difyのフローを開始（最初のトリガー）
-            #    YMLでは最初の質問生成にユーザー入力が必要なフローに見えますが、
-            #    開始ノード通過のために空文字や挨拶を送ってフローをキックします。
-            initial_response = send_chat_message(
-                query="授業内容について学んだことを教えてください。", # 初期トリガー用テキスト
+            # 2. 会話を開始（トリガー用メッセージ送信）
+            initial_res = send_chat_message(
+                query="授業内容について学んだことを教えてください。", # 開始トリガー
                 conversation_id="",
                 uploaded_file_id=file_id
             )
             
-            if initial_response:
-                st.session_state.conversation_id = initial_response.get('conversation_id')
-                st.session_state.file_uploaded = True
-                
-                # Difyからの最初の質問を表示
-                answer = initial_response.get('answer', '')
-                st.session_state.messages.append({"role": "assistant", "content": answer})
+            if initial_res:
+                st.session_state.conversation_id = initial_res.get('conversation_id')
+                # Difyからの最初の質問（「授業内容の〜」に対する応答）を表示
+                welcome_msg = initial_res.get('answer', '')
+                st.session_state.messages.append({"role": "assistant", "content": welcome_msg})
+                # 画面を更新してチャット画面を表示
                 st.rerun()
 
-# チャット履歴の表示
+# --- チャット画面 ---
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# ユーザー入力
-if prompt := st.chat_input("回答を入力してください"):
-    # ユーザーのメッセージを表示
+if prompt := st.chat_input("ここに入力..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.write(prompt)
 
-    # Difyへ送信（2回目以降なので file_id は不要）
     with st.spinner("考え中..."):
+        # 2回目以降は file_id 不要
         response = send_chat_message(
             query=prompt,
             conversation_id=st.session_state.conversation_id
         )
         
         if response:
-            answer = response.get('answer', '')
-            st.session_state.messages.append({"role": "assistant", "content": answer})
+            ans = response.get('answer', '')
+            st.session_state.messages.append({"role": "assistant", "content": ans})
             with st.chat_message("assistant"):
-                st.write(answer)
+                st.write(ans)
