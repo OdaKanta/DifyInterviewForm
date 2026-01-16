@@ -270,6 +270,7 @@ if final_prompt:
         )
         
         if response:
+            st.session_state.conversation_id = response.get('conversation_id')
             answer_text = response.get('answer', '')
             st.session_state.messages.append({"role": "assistant", "content": answer_text})
             
