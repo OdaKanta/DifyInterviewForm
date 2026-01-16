@@ -205,14 +205,14 @@ if not st.session_state.conversation_id:
         else:
             st.error("ファイルのアップロードに失敗しました。ユーザーIDを確認してください。")
 
-st.sidebar.write(f"OK1")
+st.write(f"OK1")
 
 # チャット画面表示（既存通り）
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-st.sidebar.write(f"OK2")
+st.write(f"OK2")
 
 # ユーザー入力処理
 if prompt := st.chat_input("ここに入力..."):
