@@ -151,16 +151,14 @@ if "conversation_id" not in st.session_state:
 # --- 自動初期化プロセス ---
 if not st.session_state.conversation_id:
     with st.spinner("インタビュアーを準備中...（資料を読み込んでいます）"):
-        # 変更: user_id にログインユーザー名を渡す
         file_id = upload_local_file_to_dify(FIXED_FILE_PATH, current_user)
         
         if file_id:
-            # 変更: user_id にログインユーザー名を渡す
             initial_res = send_chat_message(
                 query="授業内容について学んだことを教えてください。", 
                 conversation_id="",
                 uploaded_file_id=file_id,
-                user_id=current_user 
+                user_id=current_user  # 【重要】アップロードと同じIDを指定
             )
             
             if initial_res:
@@ -168,6 +166,9 @@ if not st.session_state.conversation_id:
                 welcome_msg = initial_res.get('answer', '')
                 st.session_state.messages.append({"role": "assistant", "content": welcome_msg})
                 st.rerun()
+        
+        else:
+            st.error("ファイルのアップロードに失敗しました。ユーザーIDを確認してください。")
 
 # チャット画面表示（既存通り）
 for msg in st.session_state.messages:
