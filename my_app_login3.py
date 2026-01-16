@@ -83,10 +83,17 @@ def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="st
 
     try:
         response = requests.post(url, headers=headers, json=payload)
+        
+        # エラーがある場合は詳細を表示して例外を投げる
+        if response.status_code != 200:
+            st.error(f"APIエラー: {response.status_code}")
+            st.code(response.text) # Difyからの生のエラーメッセージを表示
+            
         response.raise_for_status()
         return response.json()
+        
     except Exception as e:
-        st.error(f"API通信エラー: {e}")
+        # すでに上で表示しているのでここではシンプルな表示にとどめるか、何もしない
         return None
 
 # --- ログ保存機能 ---
