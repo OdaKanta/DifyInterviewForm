@@ -132,7 +132,7 @@ def text_to_speech_autoplay(text):
 # メイン処理
 # ==========================================
 st.set_page_config(page_title="講義の復習", page_icon="🤖")
-st.title("🤖 講義振り返りインタビュアー改良")
+st.title("🤖 講義振り返りインタビュアー")
 
 login()
 current_user = st.session_state.username
@@ -152,14 +152,17 @@ if "audio_html" not in st.session_state:
 if "prev_audio_bytes" not in st.session_state:
     st.session_state.prev_audio_bytes = None
 
+# 【追加】テキスト入力処理用の一時変数
+if "temp_user_input" not in st.session_state:
+    st.session_state.temp_user_input = ""
+if "input_to_process" not in st.session_state:
+    st.session_state.input_to_process = None
+
 # --- 緊急リセット ---
 if st.sidebar.button("⚠️ 会話をリセット"):
-    st.session_state.conversation_id = ""
-    st.session_state.messages = []
-    st.session_state.current_file_id = None
-    st.session_state.last_bot_message = ""
-    st.session_state.audio_html = None
-    st.session_state.prev_audio_bytes = None
+    for key in list(st.session_state.keys()):
+        if key not in ["username"]: # ログイン情報は残す
+            del st.session_state[key]
     st.rerun()
 
 # 3. 自動初期化
@@ -188,35 +191,52 @@ if not st.session_state.conversation_id:
             st.session_state.audio_html = text_to_speech_autoplay(welcome_msg)
             st.rerun()
 
-# 4. チャット履歴の表示（ここが変わりました！）
-# 固定の高さを指定したコンテナの中にメッセージを表示します。
-# これにより、メッセージが増えてもコンテナ内でスクロールされるだけで、
-# その下のマイクボタン等は位置が固定されたままになります。
-chat_container = st.container(height=500) # 高さは調整してください
+# 4. チャット履歴の表示
+chat_container = st.container(height=500)
 
 with chat_container:
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.write(msg["content"])
-    
-    # 音声再生用の隠し要素もここに入れておきます（邪魔にならないので）
     if st.session_state.audio_html:
         st.markdown(st.session_state.audio_html, unsafe_allow_html=True)
 
-# 5. 入力エリア（コンテナの外に書くことで固定表示される）
+# 5. 入力エリア（横並びレイアウト）
 st.divider()
-col1, col2 = st.columns([1, 4])
 
-with col1:
-    # ここが常に定位置になります！
-    st.write("音声入力:")
-    audio = mic_recorder(start_prompt="●", stop_prompt="■", key='recorder', format="wav")
+# 入力が確定したときに呼ばれるコールバック関数
+def submit_text():
+    st.session_state.input_to_process = st.session_state.temp_user_input
+    st.session_state.temp_user_input = "" # 入力欄をクリア
 
-user_input_text = st.chat_input("テキストで入力...")
+# カラム作成: テキストエリア(6) : マイク(1)
+# vertical_alignment="bottom" で下揃えにして、高さのズレを防ぐ
+col_input, col_mic = st.columns([6, 1], vertical_alignment="bottom")
+
+with col_input:
+    # st.chat_inputの代わりにtext_inputを使用
+    # label_visibility="collapsed" でラベルを消してスッキリさせる
+    st.text_input(
+        label="メッセージ入力",
+        key="temp_user_input",
+        placeholder="テキストを入力してEnter...",
+        label_visibility="collapsed",
+        on_change=submit_text
+    )
+
+with col_mic:
+    # マイクボタンをここに配置
+    audio = mic_recorder(
+        start_prompt="🎤", 
+        stop_prompt="⏹️", 
+        key='recorder', 
+        format="wav"
+    )
 
 # 6. 入力処理ロジック
 final_prompt = None
 
+# A. 音声入力チェック
 if audio:
     if audio['bytes'] != st.session_state.prev_audio_bytes:
         st.session_state.prev_audio_bytes = audio['bytes']
@@ -228,14 +248,16 @@ if audio:
     else:
         pass
 
-elif user_input_text:
-    final_prompt = user_input_text
+# B. テキスト入力チェック（コールバック経由）
+elif st.session_state.input_to_process:
+    final_prompt = st.session_state.input_to_process
+    st.session_state.input_to_process = None # 処理済みフラグを下ろす
     st.session_state.audio_html = None
 
+# C. 送信処理
 if final_prompt:
     st.session_state.messages.append({"role": "user", "content": final_prompt})
     
-    # ここでは「コンテナの中」に書き込みたいので、context managerを使います
     with chat_container:
         with st.chat_message("user"):
             st.write(final_prompt)
