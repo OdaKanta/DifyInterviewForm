@@ -122,7 +122,6 @@ def text_to_speech_autoplay(text):
         )
         audio_bytes = response.content
         audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
-        # プレーヤーを非表示(display:none)で自動再生
         audio_tag = f'<audio autoplay="true" style="display:none"><source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3"></audio>'
         return audio_tag
     except Exception as e:
@@ -133,13 +132,13 @@ def text_to_speech_autoplay(text):
 # メイン処理
 # ==========================================
 st.set_page_config(page_title="講義の復習", page_icon="🤖")
-st.title("🤖 講義振り返りインタビュアー")
+st.title("🤖 講義振り返りインタビュアー改良")
 
 login()
 current_user = st.session_state.username
 st.sidebar.write(f"ログイン中: {current_user}")
 
-# セッション変数初期化
+# セッション変数
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "conversation_id" not in st.session_state:
@@ -150,8 +149,6 @@ if "last_bot_message" not in st.session_state:
     st.session_state.last_bot_message = ""
 if "audio_html" not in st.session_state:
     st.session_state.audio_html = None
-
-# 【重要追加】前回の録音データを覚えておくための変数
 if "prev_audio_bytes" not in st.session_state:
     st.session_state.prev_audio_bytes = None
 
@@ -162,7 +159,7 @@ if st.sidebar.button("⚠️ 会話をリセット"):
     st.session_state.current_file_id = None
     st.session_state.last_bot_message = ""
     st.session_state.audio_html = None
-    st.session_state.prev_audio_bytes = None # ここもリセット
+    st.session_state.prev_audio_bytes = None
     st.rerun()
 
 # 3. 自動初期化
@@ -191,20 +188,27 @@ if not st.session_state.conversation_id:
             st.session_state.audio_html = text_to_speech_autoplay(welcome_msg)
             st.rerun()
 
-# 4. チャット履歴
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.write(msg["content"])
+# 4. チャット履歴の表示（ここが変わりました！）
+# 固定の高さを指定したコンテナの中にメッセージを表示します。
+# これにより、メッセージが増えてもコンテナ内でスクロールされるだけで、
+# その下のマイクボタン等は位置が固定されたままになります。
+chat_container = st.container(height=500) # 高さは調整してください
 
-# 音声自動再生
-if st.session_state.audio_html:
-    st.markdown(st.session_state.audio_html, unsafe_allow_html=True)
+with chat_container:
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.write(msg["content"])
+    
+    # 音声再生用の隠し要素もここに入れておきます（邪魔にならないので）
+    if st.session_state.audio_html:
+        st.markdown(st.session_state.audio_html, unsafe_allow_html=True)
 
-# 5. 入力エリア
+# 5. 入力エリア（コンテナの外に書くことで固定表示される）
 st.divider()
 col1, col2 = st.columns([1, 4])
 
 with col1:
+    # ここが常に定位置になります！
     st.write("音声入力:")
     audio = mic_recorder(start_prompt="●", stop_prompt="■", key='recorder', format="wav")
 
@@ -213,32 +217,28 @@ user_input_text = st.chat_input("テキストで入力...")
 # 6. 入力処理ロジック
 final_prompt = None
 
-# A. 音声入力処理（ループ対策済み）
 if audio:
-    # 前回の録音データとバイト列が違う場合のみ処理する（＝新しい録音が来た）
     if audio['bytes'] != st.session_state.prev_audio_bytes:
-        # 今回のデータを「前回データ」として保存
         st.session_state.prev_audio_bytes = audio['bytes']
-        
         with st.spinner("音声認識中..."):
             transcribed_text = transcribe_audio(audio['bytes'])
             if transcribed_text:
                 final_prompt = transcribed_text
                 st.session_state.audio_html = None
     else:
-        # データはあるが、前回と同じ（リロードによる再送）なので無視
         pass
 
-# B. テキスト入力処理
 elif user_input_text:
     final_prompt = user_input_text
     st.session_state.audio_html = None
 
-# C. 送信処理
 if final_prompt:
     st.session_state.messages.append({"role": "user", "content": final_prompt})
-    with st.chat_message("user"):
-        st.write(final_prompt)
+    
+    # ここでは「コンテナの中」に書き込みたいので、context managerを使います
+    with chat_container:
+        with st.chat_message("user"):
+            st.write(final_prompt)
 
     with st.spinner("思考中..."):
         response = send_chat_message(
