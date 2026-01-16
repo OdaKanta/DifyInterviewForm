@@ -70,7 +70,7 @@ def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="st
     if uploaded_file_id:
         # 修正: 配列 [ ] で囲み、typeを "file" にしてみる（YAMLの定義によっては document ではなく file の場合があるため）
         inputs[FILE_VARIABLE_KEY] = [{
-            "type": "document",  # エラーが続く場合、ここを "file" に変えて試してください
+            "type": "file",  # エラーが続く場合、ここを "file" に変えて試してください
             "transfer_method": "local_file",
             "upload_file_id": uploaded_file_id
         }]
