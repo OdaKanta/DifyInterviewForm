@@ -165,40 +165,34 @@ if st.sidebar.button("⚠️ 会話をリセット"):
             del st.session_state[key]
     st.rerun()
 
-# 3. 自動初期化
+# 3. 自動初期化（修正版：APIを叩かず、静的に開始する）
 if not st.session_state.conversation_id:
-    with st.spinner("インタビュアーを準備中..."):
-        if not st.session_state.current_file_id:
-            file_id = upload_local_file_to_dify(FIXED_FILE_PATH, current_user)
-            if file_id:
-                st.session_state.current_file_id = file_id
-            else:
-                st.error("ファイルのアップロードに失敗しました。")
-                st.stop()
-        
-        # 1. 裏でDifyに会話を開始させる（IDを取得するためだけに送る）
-        # 内容はなんでもいいですが、文脈を作るために指示を送っておきます
-        initial_instruction = "面接を開始します。学習者に対して授業内容の質問を始めてください。"
-        
-        initial_res = send_chat_message(
-            query=initial_instruction, 
-            conversation_id="",
-            file_id_to_send=st.session_state.current_file_id,
-            user_id=current_user
-        )
-        
-        if initial_res:
-            st.session_state.conversation_id = initial_res.get('conversation_id')
+    # まだメッセージ履歴がない場合のみ実行
+    if not st.session_state.messages:
+        with st.spinner("インタビュアーを準備中..."):
             
-            # 【ここが修正点】
-            # AIからの返答(initial_res['answer'])は無視して捨てます！
-            # 代わりに、表示させたい「理想の第一声」を強制的にセットします。
-            forced_first_message = "授業内容について学んだことを教えてください。"
+            # 1. ファイルアップロードだけは済ませておく（ID確保）
+            if not st.session_state.current_file_id:
+                file_id = upload_local_file_to_dify(FIXED_FILE_PATH, current_user)
+                if file_id:
+                    st.session_state.current_file_id = file_id
+                else:
+                    st.error("ファイルのアップロードに失敗しました。")
+                    st.stop()
             
-            st.session_state.messages.append({"role": "assistant", "content": forced_first_message})
-            st.session_state.last_bot_message = forced_first_message
-            st.session_state.audio_html = text_to_speech_autoplay(forced_first_message)
+            # 2. Difyには何も送らず、ここで勝手に第一声を表示する
+            static_first_msg = "授業内容について学んだことを教えてください。"
             
+            # 画面表示用リストに追加
+            st.session_state.messages.append({"role": "assistant", "content": static_first_msg})
+            
+            # ログ保存用（次のターンのため）
+            st.session_state.last_bot_message = static_first_msg
+            
+            # 音声生成（ここだけはOpenAI APIを叩きますが、Difyは叩きません）
+            st.session_state.audio_html = text_to_speech_autoplay(static_first_msg)
+            
+            # 画面更新して表示
             st.rerun()
 
 # 4. チャット履歴の表示
