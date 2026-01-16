@@ -221,10 +221,6 @@ with col_input:
     )
 
 with col_mic:
-    # 2. ここで「上からの距離」をピクセル単位で指定してボタンを押し下げます
-    # "8px" の数値を書き換えて、ちょうどいい高さに調整してください
-    # st.markdown('<div style="padding-top: 2px;"></div>', unsafe_allow_html=True)
-    
     audio = mic_recorder(
         start_prompt="🎤", 
         stop_prompt="⏹️", 
