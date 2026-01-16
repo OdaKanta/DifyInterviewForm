@@ -169,12 +169,13 @@ def save_log_to_sheet(username, user_input, full_response, conversation_id):
 
 # --- UI構築 ---
 st.set_page_config(page_title="講義の復習", page_icon="🤖")
-st.title("🤖 講義振り返りインタビュアー")
+st.title("🤖 講義振り返りインタビュアーですよ")
 
 # --- 最初にログインチェックを実行 ---
 login()
 current_user = st.session_state.username
 st.sidebar.write(f"ログイン中: {current_user}")
+st.sidebar.write(f"開始")
 
 # セッション管理（既存通り）
 if "messages" not in st.session_state:
@@ -204,16 +205,21 @@ if not st.session_state.conversation_id:
         else:
             st.error("ファイルのアップロードに失敗しました。ユーザーIDを確認してください。")
 
+st.sidebar.write(f"OK1")
+
 # チャット画面表示（既存通り）
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
+
+st.sidebar.write(f"OK2")
 
 # ユーザー入力処理
 if prompt := st.chat_input("ここに入力..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.write(prompt)
+        st.sidebar.write(f"OK3")
 
     with st.spinner("考え中..."):
         # 変更: user_id にログインユーザー名を渡す
