@@ -66,15 +66,14 @@ def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="st
     url = f"{BASE_URL}/chat-messages"
     inputs = {}
     
-    # --- 【修正点】ファイルIDがある場合、必ずリスト [ ] で囲む ---
+    # --- ファイルデータの構築 ---
     if uploaded_file_id:
-        file_obj = {
-            "type": "document", 
+        # 修正: 配列 [ ] で囲み、typeを "file" にしてみる（YAMLの定義によっては document ではなく file の場合があるため）
+        inputs[FILE_VARIABLE_KEY] = [{
+            "type": "document",  # エラーが続く場合、ここを "file" に変えて試してください
             "transfer_method": "local_file",
             "upload_file_id": uploaded_file_id
-        }
-        # ここが重要：単体でもリストに入れる
-        inputs[FILE_VARIABLE_KEY] = [file_obj] 
+        }]
 
     payload = {
         "inputs": inputs,
@@ -84,10 +83,12 @@ def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="st
         "user": user_id,
     }
     
-    # --- 【デバッグ】画面に強制表示（st.write使用） ---
-    st.write("--- 🚀 Difyへの送信データ (Debug) ---")
-    st.write(payload) # JSONの中身をそのまま表示
-    st.write("---------------------------------------")
+    # --- 【デバッグ】サイドバーに表示（これなら見逃しません） ---
+    with st.sidebar:
+        st.divider()
+        st.subheader("🐞 デバッグ情報")
+        st.write("Difyへの送信データ:")
+        st.json(payload) # JSON構造を見やすく表示
     # -----------------------------------------------
 
     try:
@@ -95,19 +96,18 @@ def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="st
         
         # エラー時の詳細表示
         if response.status_code != 200:
-            st.error(f"APIエラー: {response.status_code}")
-            st.error("▼ Difyからのエラーメッセージ")
-            # エラーレスポンスをJSONとして表示、失敗したらテキストで
-            try:
-                st.json(response.json())
-            except:
-                st.write(response.text)
+            with st.sidebar:
+                st.error(f"エラー発生: {response.status_code}")
+                st.write("▼ Difyからのエラー応答")
+                try:
+                    st.json(response.json())
+                except:
+                    st.text(response.text)
             
         response.raise_for_status()
         return response.json()
         
     except Exception as e:
-        # 呼び出し元でNone判定するためにここではNoneを返す
         return None
 
 # --- ログ保存機能 ---
