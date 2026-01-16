@@ -67,20 +67,13 @@ def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="st
     inputs = {}
     
     # --- ファイルデータの構築 ---
-    # ここで「リストにするか」「辞書にするか」を切り替えてテストできます
     if uploaded_file_id:
-        file_payload = {
-            "type": "document",  # YAMLで "document" と定義されているため
+        # まずは「リスト型 []」で試してみます（これが正解の可能性が高いため）
+        inputs[FILE_VARIABLE_KEY] = [{
+            "type": "document", 
             "transfer_method": "local_file",
             "upload_file_id": uploaded_file_id
-        }
-        
-        # パターンA: リストで囲む（前回の提案）
-        # inputs[FILE_VARIABLE_KEY] = [file_payload]
-
-        # パターンB: 辞書のまま送る（最初の状態）
-        # もしリストでダメなら、ここをコメントアウトを外して試してください
-        inputs[FILE_VARIABLE_KEY] = file_payload 
+        }]
 
     payload = {
         "inputs": inputs,
@@ -90,29 +83,23 @@ def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="st
         "user": user_id,
     }
     
-    # --- 【デバッグ】送信するJSONをターミナルに表示 ---
-    print("\n" + "="*30)
-    print("🚀 [DEBUG] Sending Payload to Dify:")
-    print(json.dumps(payload, indent=2, ensure_ascii=False))
-    print("="*30 + "\n")
+    # --- 【デバッグ表示】ブラウザ画面にデータを出力 ---
+    with st.expander("🔍 デバッグ用: 送信データの中身", expanded=True):
+        st.write("Difyに以下のデータを送信します:")
+        st.json(payload)  # ここでJSONが綺麗に表示されます
     # -----------------------------------------------
 
     try:
         response = requests.post(url, headers=headers, json=payload)
         
-        # エラー時の詳細表示
+        # エラー時の表示
         if response.status_code != 200:
             st.error(f"APIエラー: {response.status_code}")
-            
-            # レスポンスの中身を表示
+            # エラーレスポンスも画面に表示
             try:
-                error_json = response.json()
-                st.code(json.dumps(error_json, indent=2, ensure_ascii=False), language="json")
-                print("❌ [DEBUG] Error Response:")
-                print(json.dumps(error_json, indent=2, ensure_ascii=False))
+                st.json(response.json())
             except:
-                st.code(response.text)
-                print("❌ [DEBUG] Error Response (Text):", response.text)
+                st.write(response.text)
             
         response.raise_for_status()
         return response.json()
