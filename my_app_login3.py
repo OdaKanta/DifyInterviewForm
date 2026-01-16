@@ -67,11 +67,11 @@ def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="st
     
     # ファイルIDがある場合（初回）のみinputsにセット
     if uploaded_file_id:
-        inputs[FILE_VARIABLE_KEY] = {
+        inputs[FILE_VARIABLE_KEY] = [{
             "type": "document",
             "transfer_method": "local_file",
             "upload_file_id": uploaded_file_id
-        }
+        }]
 
     payload = {
         "inputs": inputs,
