@@ -163,6 +163,13 @@ def save_log_to_sheet(username, user_input, full_response, conversation_id):
 st.set_page_config(page_title="講義の復習", page_icon="🤖")
 st.title("🤖 講義振り返りインタビュアー")
 
+# --- 緊急リセットボタン ---
+if st.button("⚠️ 会話IDをリセット（エラーが出たらここを押す）"):
+    st.session_state.conversation_id = ""
+    st.session_state.messages = []
+    st.session_state.file_uploaded = False # もし使っていれば
+    st.rerun()
+
 # --- 最初にログインチェックを実行 ---
 login()
 current_user = st.session_state.username
