@@ -98,17 +98,28 @@ elif st.session_state["authentication_status"]:
 
             response = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=data, stream=True)
 
-            for line in response.iter_lines():
-                if line:
-                    decoded_line = line.decode('utf-8')
-                    if decoded_line.startswith('data: '):
-                        chunk = json.loads(decoded_line[6:])
-                        if "conversation_id" in chunk:
-                            st.session_state.conversation_id = chunk["conversation_id"]
-                        if "answer" in chunk:
-                            full_response += chunk["answer"]
-                            response_placeholder.markdown(full_response + "▌")
 
+            for line in response.iter_lines():
+                if not line:
+                    continue
+            
+                decoded_line = line.decode("utf-8")
+            
+                if not decoded_line.startswith("data: "):
+                    continue
+            
+                chunk = json.loads(decoded_line[6:])
+            
+                # 会話ID
+                if "conversation_id" in chunk:
+                    st.session_state.conversation_id = chunk["conversation_id"]
+            
+                # ★ここが重要
+                if chunk.get("event") == "message":
+                    text = chunk.get("answer", "")
+                    full_response += text
+                    response_placeholder.markdown(full_response + "▌")
+        
             st.write("DEBUG full_response:", repr(full_response))
             st.write("length:", len(full_response))
             
