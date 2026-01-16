@@ -66,14 +66,16 @@ def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="st
     url = f"{BASE_URL}/chat-messages"
     inputs = {}
     
-    # --- ファイルデータの構築 ---
+    # --- 【修正】ファイル変数のデータ構築 ---
     if uploaded_file_id:
-        # 修正: 配列 [ ] で囲み、typeを "file" にしてみる（YAMLの定義によっては document ではなく file の場合があるため）
-        inputs[FILE_VARIABLE_KEY] = [{
-            "type": "file",  # エラーが続く場合、ここを "file" に変えて試してください
+        # Difyの仕様に合わせて「リスト」かつ「type: file」で作成
+        file_obj = {
+            "type": "file",                # YAML定義に合わせて "file" に変更
             "transfer_method": "local_file",
             "upload_file_id": uploaded_file_id
-        }]
+        }
+        # 重要：必ずリスト [ ] で囲む
+        inputs[FILE_VARIABLE_KEY] = [file_obj]
 
     payload = {
         "inputs": inputs,
@@ -83,31 +85,33 @@ def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="st
         "user": user_id,
     }
     
-    # --- 【デバッグ】サイドバーに表示（これなら見逃しません） ---
-    with st.sidebar:
-        st.divider()
-        st.subheader("🐞 デバッグ情報")
-        st.write("Difyへの送信データ:")
-        st.json(payload) # JSON構造を見やすく表示
-    # -----------------------------------------------
+    # --- 【デバッグ】アシスタントの吹き出し内に強制表示 ---
+    # ここでチャットUIの一部として表示させるので、見逃すことはありません
+    with st.chat_message("assistant"):
+        st.caption("🛠 デバッグ: Difyへの送信データ")
+        st.code(json.dumps(payload, indent=2, ensure_ascii=False), language="json")
+    # ----------------------------------------------------
 
     try:
         response = requests.post(url, headers=headers, json=payload)
         
-        # エラー時の詳細表示
+        # エラー発生時も吹き出しの中に表示
         if response.status_code != 200:
-            with st.sidebar:
-                st.error(f"エラー発生: {response.status_code}")
-                st.write("▼ Difyからのエラー応答")
+            with st.chat_message("assistant"):
+                st.error(f"🛑 APIエラー: {response.status_code}")
+                st.write("▼ エラー詳細")
                 try:
                     st.json(response.json())
                 except:
                     st.text(response.text)
+            return None
             
         response.raise_for_status()
         return response.json()
         
     except Exception as e:
+        with st.chat_message("assistant"):
+            st.error(f"通信エラー: {e}")
         return None
 
 # --- ログ保存機能 ---
