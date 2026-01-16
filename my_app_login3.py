@@ -5,7 +5,6 @@ import datetime
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 import json
-import traceback
 
 # --- スプレッドシート接続 ---
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -64,70 +63,61 @@ def upload_local_file_to_dify(file_path, user_id):
             return None
 
 def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="streamlit_student"):
-    # --- 診断エリア（サイドバー） ---
-    st.sidebar.markdown("---")
-    st.sidebar.warning("📡 通信診断ログ")
-    st.sidebar.write(f"Function called with file_id: `{uploaded_file_id}`")
+    url = f"{BASE_URL}/chat-messages"
+    inputs = {}
     
-    try:
-        url = f"{BASE_URL}/chat-messages"
-        inputs = {}
-        
-        # --- ファイル変数の構築 ---
-        if uploaded_file_id:
-            # 【重要】Difyの仕様に合わせて [リスト] かつ "file" 型にする
-            file_structure = {
-                "type": "file",           # document ではなく file
-                "transfer_method": "local_file",
-                "upload_file_id": uploaded_file_id
-            }
-            # リストで包む
-            inputs[FILE_VARIABLE_KEY] = [file_structure]
-            
-            st.sidebar.info("✅ ファイル変数をセットしました (List形式)")
-        else:
-            st.sidebar.write("ℹ️ ファイルIDがないため、ファイル変数は空で送ります")
-
-        payload = {
-            "inputs": inputs,
-            "query": query,
-            "response_mode": "blocking",
-            "conversation_id": conversation_id,
-            "user": user_id,
+    # --- ファイルデータの構築 ---
+    # ここで「リストにするか」「辞書にするか」を切り替えてテストできます
+    if uploaded_file_id:
+        file_payload = {
+            "type": "document",  # YAMLで "document" と定義されているため
+            "transfer_method": "local_file",
+            "upload_file_id": uploaded_file_id
         }
         
-        # --- JSONの中身をサイドバーにダンプ ---
-        st.sidebar.code(json.dumps(payload, indent=2, ensure_ascii=False), language="json")
-        
-        # --- リクエスト送信 ---
-        st.sidebar.write("... API送信中 ...")
+        # パターンA: リストで囲む（前回の提案）
+        # inputs[FILE_VARIABLE_KEY] = [file_payload]
+
+        # パターンB: 辞書のまま送る（最初の状態）
+        # もしリストでダメなら、ここをコメントアウトを外して試してください
+        inputs[FILE_VARIABLE_KEY] = file_payload 
+
+    payload = {
+        "inputs": inputs,
+        "query": query,
+        "response_mode": "blocking",
+        "conversation_id": conversation_id,
+        "user": user_id,
+    }
+    
+    # --- 【デバッグ】送信するJSONをターミナルに表示 ---
+    print("\n" + "="*30)
+    print("🚀 [DEBUG] Sending Payload to Dify:")
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    print("="*30 + "\n")
+    # -----------------------------------------------
+
+    try:
         response = requests.post(url, headers=headers, json=payload)
         
-        # --- 結果確認 ---
-        if response.status_code == 200:
-            st.sidebar.success("🎉 成功 (200 OK)")
-            return response.json()
-        else:
-            st.sidebar.error(f"❌ 失敗: {response.status_code}")
-            # エラー内容を詳細表示
+        # エラー時の詳細表示
+        if response.status_code != 200:
+            st.error(f"APIエラー: {response.status_code}")
+            
+            # レスポンスの中身を表示
             try:
-                err_json = response.json()
-                st.sidebar.json(err_json)
-                
-                # 特定のエラーに対するヒント
-                if err_json.get("code") == "invalid_param":
-                    st.sidebar.error("ヒント: パラメータの構造がDifyの期待と違います。inputsの中身を確認してください。")
+                error_json = response.json()
+                st.code(json.dumps(error_json, indent=2, ensure_ascii=False), language="json")
+                print("❌ [DEBUG] Error Response:")
+                print(json.dumps(error_json, indent=2, ensure_ascii=False))
             except:
-                st.sidebar.text(response.text)
+                st.code(response.text)
+                print("❌ [DEBUG] Error Response (Text):", response.text)
             
-            # エラーでも処理を継続させるためNoneを返すのではなく例外を投げる
-            response.raise_for_status()
-            
+        response.raise_for_status()
+        return response.json()
+        
     except Exception as e:
-        # ここですべての「見えないエラー」を捕まえて表示します
-        st.error(f"⚠️ 内部処理エラー発生: {e}")
-        st.sidebar.error(f"例外詳細: {e}")
-        st.sidebar.text(traceback.format_exc()) # どこで落ちたか行番号を表示
         return None
 
 # --- ログ保存機能 ---
@@ -169,13 +159,12 @@ def save_log_to_sheet(username, user_input, full_response, conversation_id):
 
 # --- UI構築 ---
 st.set_page_config(page_title="講義の復習", page_icon="🤖")
-st.title("🤖 講義振り返りインタビュアーですよ")
+st.title("🤖 講義振り返りインタビュアー")
 
 # --- 最初にログインチェックを実行 ---
 login()
 current_user = st.session_state.username
 st.sidebar.write(f"ログイン中: {current_user}")
-st.sidebar.write(f"開始")
 
 # セッション管理（既存通り）
 if "messages" not in st.session_state:
@@ -205,21 +194,16 @@ if not st.session_state.conversation_id:
         else:
             st.error("ファイルのアップロードに失敗しました。ユーザーIDを確認してください。")
 
-st.write(f"OK1")
-
 # チャット画面表示（既存通り）
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
-
-st.write(f"OK2")
 
 # ユーザー入力処理
 if prompt := st.chat_input("ここに入力..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.write(prompt)
-        st.sidebar.write(f"OK3")
 
     with st.spinner("考え中..."):
         # 変更: user_id にログインユーザー名を渡す
