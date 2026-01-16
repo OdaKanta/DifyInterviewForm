@@ -205,13 +205,11 @@ if prompt := st.chat_input("ここに入力..."):
         
         if response:
             next_question = response.get('answer', '')
-            st.session_state.messages.append({"role": "assistant", "content": next_question})
-            with st.chat_message("assistant"):
-                st.write(next_question)
             
-            # 【重要変更】ログ保存：
-            # 「ユーザーの今回の入力(prompt)」と
-            # 「前回ボットが発した質問(last_bot_message)」をペアにして保存
+            # メッセージリストに追加
+            st.session_state.messages.append({"role": "assistant", "content": next_question})
+            
+            # ログ保存
             save_log_to_sheet(
                 username=current_user,
                 user_input=prompt,
@@ -219,5 +217,8 @@ if prompt := st.chat_input("ここに入力..."):
                 conversation_id=st.session_state.conversation_id
             )
             
-            # 保存が終わったら、次回のペアリングのために「直前の質問」を更新しておく
+            # 直前の質問を更新
             st.session_state.last_bot_message = next_question
+            
+            # 【修正】その場で表示せず、Rerunして上部の「履歴ループ」できれいに表示させる
+            st.rerun()
