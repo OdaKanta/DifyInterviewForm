@@ -92,10 +92,19 @@ elif st.session_state["authentication_status"]:
             DIFY_KEY = st.secrets["DIFY_API_KEY"]
             headers = {"Authorization": f"Bearer {DIFY_KEY}", "Content-Type": "application/json"}
             data = {
-                "inputs": {}, "query": user_input, "response_mode": "streaming",
-                "user": username, "conversation_id": st.session_state.conversation_id
+                "inputs": {},
+                "query": user_input,
+                "response_mode": "streaming",
+                "user": username,
+                "conversation_id": st.session_state.conversation_id,
+                "files": [
+                    {
+                        "type": "text",
+                        "transfer_method": "remote_url",
+                        "url": ""
+                    }
+                ]
             }
-
             response = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=data, stream=True)
 
 
