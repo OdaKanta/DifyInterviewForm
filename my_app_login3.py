@@ -3,7 +3,7 @@ import requests
 import json
 
 # --- 設定 ---
-API_KEY =  = st.secrets["DIFY_API_KEY"]
+API_KEY = st.secrets["DIFY_API_KEY"]
 BASE_URL = "https://api.dify.ai/v1"  # オンプレ版の場合はそのURL
 # 開始ノードで定義されている変数名（YMLの "variable: material" に対応）
 FILE_VARIABLE_KEY = "material" 
