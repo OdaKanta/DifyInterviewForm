@@ -5,6 +5,7 @@ import datetime
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 import json
+import traceback
 
 # --- スプレッドシート接続 ---
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -63,55 +64,70 @@ def upload_local_file_to_dify(file_path, user_id):
             return None
 
 def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="streamlit_student"):
-    url = f"{BASE_URL}/chat-messages"
-    inputs = {}
+    # --- 診断エリア（サイドバー） ---
+    st.sidebar.markdown("---")
+    st.sidebar.warning("📡 通信診断ログ")
+    st.sidebar.write(f"Function called with file_id: `{uploaded_file_id}`")
     
-    # --- 【修正】ファイル変数のデータ構築 ---
-    if uploaded_file_id:
-        # Difyの仕様に合わせて「リスト」かつ「type: file」で作成
-        file_obj = {
-            "type": "file",                # YAML定義に合わせて "file" に変更
-            "transfer_method": "local_file",
-            "upload_file_id": uploaded_file_id
-        }
-        # 重要：必ずリスト [ ] で囲む
-        inputs[FILE_VARIABLE_KEY] = [file_obj]
-
-    payload = {
-        "inputs": inputs,
-        "query": query,
-        "response_mode": "blocking",
-        "conversation_id": conversation_id,
-        "user": user_id,
-    }
-    
-    # --- 【デバッグ】アシスタントの吹き出し内に強制表示 ---
-    # ここでチャットUIの一部として表示させるので、見逃すことはありません
-    with st.chat_message("assistant"):
-        st.caption("🛠 デバッグ: Difyへの送信データ")
-        st.code(json.dumps(payload, indent=2, ensure_ascii=False), language="json")
-    # ----------------------------------------------------
-
     try:
+        url = f"{BASE_URL}/chat-messages"
+        inputs = {}
+        
+        # --- ファイル変数の構築 ---
+        if uploaded_file_id:
+            # 【重要】Difyの仕様に合わせて [リスト] かつ "file" 型にする
+            file_structure = {
+                "type": "file",           # document ではなく file
+                "transfer_method": "local_file",
+                "upload_file_id": uploaded_file_id
+            }
+            # リストで包む
+            inputs[FILE_VARIABLE_KEY] = [file_structure]
+            
+            st.sidebar.info("✅ ファイル変数をセットしました (List形式)")
+        else:
+            st.sidebar.write("ℹ️ ファイルIDがないため、ファイル変数は空で送ります")
+
+        payload = {
+            "inputs": inputs,
+            "query": query,
+            "response_mode": "blocking",
+            "conversation_id": conversation_id,
+            "user": user_id,
+        }
+        
+        # --- JSONの中身をサイドバーにダンプ ---
+        st.sidebar.code(json.dumps(payload, indent=2, ensure_ascii=False), language="json")
+        
+        # --- リクエスト送信 ---
+        st.sidebar.write("... API送信中 ...")
         response = requests.post(url, headers=headers, json=payload)
         
-        # エラー発生時も吹き出しの中に表示
-        if response.status_code != 200:
-            with st.chat_message("assistant"):
-                st.error(f"🛑 APIエラー: {response.status_code}")
-                st.write("▼ エラー詳細")
-                try:
-                    st.json(response.json())
-                except:
-                    st.text(response.text)
-            return None
+        # --- 結果確認 ---
+        if response.status_code == 200:
+            st.sidebar.success("🎉 成功 (200 OK)")
+            return response.json()
+        else:
+            st.sidebar.error(f"❌ 失敗: {response.status_code}")
+            # エラー内容を詳細表示
+            try:
+                err_json = response.json()
+                st.sidebar.json(err_json)
+                
+                # 特定のエラーに対するヒント
+                if err_json.get("code") == "invalid_param":
+                    st.sidebar.error("ヒント: パラメータの構造がDifyの期待と違います。inputsの中身を確認してください。")
+            except:
+                st.sidebar.text(response.text)
             
-        response.raise_for_status()
-        return response.json()
-        
+            # エラーでも処理を継続させるためNoneを返すのではなく例外を投げる
+            response.raise_for_status()
+            
     except Exception as e:
-        with st.chat_message("assistant"):
-            st.error(f"通信エラー: {e}")
+        # ここですべての「見えないエラー」を捕まえて表示します
+        st.error(f"⚠️ 内部処理エラー発生: {e}")
+        st.sidebar.error(f"例外詳細: {e}")
+        st.sidebar.text(traceback.format_exc()) # どこで落ちたか行番号を表示
         return None
 
 # --- ログ保存機能 ---
