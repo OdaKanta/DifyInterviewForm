@@ -96,8 +96,8 @@ elif st.session_state["authentication_status"]:
                     "name": "material",          # Dify 側の入力フィールド名
                     "type": "file",
                     "transfer_method": "remote_url",
-                    #"url": "https://odakanta.github.io/DifyInterviewForm/CV11.pdf"
-                    "url": "https://raw.githubusercontent.com/odakanta/DifyInterviewForm/main/CV11.pdf"
+                    "url": "https://odakanta.github.io/DifyInterviewForm/CV11.pdf"
+                    #"url": "https://raw.githubusercontent.com/odakanta/DifyInterviewForm/main/CV11.pdf"
                 }
             ]
 
