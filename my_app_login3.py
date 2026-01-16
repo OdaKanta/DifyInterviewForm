@@ -16,7 +16,6 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- 設定 ---
 DIFY_API_KEY = st.secrets["DIFY_API_KEY"]
-# 【追加】OpenAIクライアントの初期化 (TTS/STT用)
 # .streamlit/secrets.toml に OPENAI_API_KEY = "sk-..." を記述してください
 openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
@@ -116,21 +115,19 @@ def save_log_to_sheet(username, user_input, bot_question, conversation_id):
     except Exception as e:
         st.error(f"ログ保存エラー: {e}")
 
-# --- 【新規追加】音声処理関数 ---
+# --- 音声処理関数（修正版） ---
 
 def transcribe_audio(audio_bytes):
     """OpenAI Whisperを使って音声をテキストに変換"""
     try:
-        # OpenAI APIはファイルオブジェクトを必要とするため、一時ファイル等は使わず
-        # io.BytesIOに名前をつけて渡すテクニックを使います
         import io
         audio_file = io.BytesIO(audio_bytes)
-        audio_file.name = "input.wav" # 拡張子が重要
+        audio_file.name = "input.wav"
         
         transcript = openai_client.audio.transcriptions.create(
             model="whisper-1", 
             file=audio_file,
-            language="ja" # 日本語を指定すると精度向上
+            language="ja"
         )
         return transcript.text
     except Exception as e:
@@ -138,18 +135,25 @@ def transcribe_audio(audio_bytes):
         return ""
 
 def text_to_speech_autoplay(text):
-    """OpenAI TTSを使ってテキストを音声に変換し、自動再生用HTMLを生成"""
+    """
+    OpenAI TTSを使って音声を生成し、非表示プレーヤーで自動再生する
+    修正点:
+    1. model="tts-1-hd" (高音質版)
+    2. voice="nova" (日本語のイントネーションが比較的自然)
+    3. style="display:none" (プレーヤー非表示)
+    """
     try:
         response = openai_client.audio.speech.create(
-            model="tts-1",
-            voice="alloy", # alloy, echo, fable, onyx, nova, shimmer から選択可
+            model="tts-1-hd", # 高音質モデル
+            voice="nova",     # 日本語に適した声 (alloyは訛りやすい)
             input=text
         )
         
-        # 音声データをBase64エンコードしてHTML Audioタグに埋め込む
         audio_bytes = response.content
         audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
-        audio_tag = f'<audio autoplay="true" controls><source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3"></audio>'
+        
+        # controls属性を削除し、style="display:none" を追加
+        audio_tag = f'<audio autoplay="true" style="display:none"><source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3"></audio>'
         
         return audio_tag
     except Exception as e:
@@ -162,11 +166,12 @@ def text_to_speech_autoplay(text):
 st.set_page_config(page_title="講義の復習", page_icon="🤖")
 st.title("🤖 講義振り返りインタビュアー")
 
-# 1. ログイン & セッション初期化
+# 1. ログイン
 login()
 current_user = st.session_state.username
 st.sidebar.write(f"ログイン中: {current_user}")
 
+# 2. セッション変数
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "conversation_id" not in st.session_state:
@@ -175,11 +180,10 @@ if "current_file_id" not in st.session_state:
     st.session_state.current_file_id = None
 if "last_bot_message" not in st.session_state:
     st.session_state.last_bot_message = ""
-# 【追加】音声再生用のHTMLを保持する変数
 if "audio_html" not in st.session_state:
     st.session_state.audio_html = None
 
-# --- 緊急リセットボタン ---
+# --- 緊急リセット ---
 if st.sidebar.button("⚠️ 会話をリセット"):
     st.session_state.conversation_id = ""
     st.session_state.messages = []
@@ -188,7 +192,7 @@ if st.sidebar.button("⚠️ 会話をリセット"):
     st.session_state.audio_html = None
     st.rerun()
 
-# 2. 自動初期化（ファイルアップロード & 初回質問）
+# 3. 自動初期化
 if not st.session_state.conversation_id:
     with st.spinner("インタビュアーを準備中..."):
         if not st.session_state.current_file_id:
@@ -212,69 +216,56 @@ if not st.session_state.conversation_id:
             st.session_state.messages.append({"role": "assistant", "content": welcome_msg})
             st.session_state.last_bot_message = welcome_msg
             
-            # 初回メッセージも音声再生する場合
+            # 初回音声再生
             audio_tag = text_to_speech_autoplay(welcome_msg)
             st.session_state.audio_html = audio_tag
             
             st.rerun()
 
-# 3. チャット履歴の表示
+# 4. チャット履歴
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# 【追加】音声自動再生（最新のAI応答がある場合、画面上部や末尾で再生される）
-#  st.empty() を使って、再生が終わったら消す制御も可能ですが、履歴に残らないようにここで表示
+# 音声自動再生 (姿は見せず音だけ出す)
 if st.session_state.audio_html:
     st.markdown(st.session_state.audio_html, unsafe_allow_html=True)
-    # 一度再生用に表示したら、リロード時に再再生されないようにクリアしたいが、
-    # Streamlitのライフサイクル上、ここをNoneにすると即座に消えて再生されないため、
-    # 新しい入力があったタイミングでクリアされる運用にします。
 
-# 4. 入力エリア（音声 OR テキスト）
+# 5. 入力エリア
 st.divider()
 col1, col2 = st.columns([1, 4])
 
-# 音声入力ボタン
 with col1:
     st.write("音声入力:")
     audio = mic_recorder(
-        start_prompt="録音開始",
-        stop_prompt="録音終了",
+        start_prompt="●",
+        stop_prompt="■",
         key='recorder',
-        format="wav" # Whisperはwav対応
+        format="wav"
     )
 
-# テキスト入力ボックス
 user_input_text = st.chat_input("テキストで入力...")
 
-# 5. 入力処理ロジック
+# 6. 入力処理
 final_prompt = None
 
-# A. 音声入力があった場合
 if audio:
-    # mic_recorderは録音完了時にバイトデータを返します
     with st.spinner("音声認識中..."):
         transcribed_text = transcribe_audio(audio['bytes'])
         if transcribed_text:
             final_prompt = transcribed_text
-            # 既存の音声プレーヤーを消去（自分の声が認識されたら前の音声は不要）
             st.session_state.audio_html = None
 
-# B. テキスト入力があった場合
 elif user_input_text:
     final_prompt = user_input_text
     st.session_state.audio_html = None
 
-# C. 入力が確定した場合の送信処理
 if final_prompt:
-    # ユーザー発言を表示
     st.session_state.messages.append({"role": "user", "content": final_prompt})
     with st.chat_message("user"):
         st.write(final_prompt)
 
-    with st.spinner("AIが思考中..."):
-        # Difyへ送信
+    with st.spinner("思考中..."):
         response = send_chat_message(
             query=final_prompt,
             conversation_id=st.session_state.conversation_id,
@@ -284,11 +275,8 @@ if final_prompt:
         
         if response:
             answer_text = response.get('answer', '')
-            
-            # メッセージ履歴に追加
             st.session_state.messages.append({"role": "assistant", "content": answer_text})
             
-            # ログ保存
             save_log_to_sheet(
                 username=current_user,
                 user_input=final_prompt,
@@ -296,12 +284,10 @@ if final_prompt:
                 conversation_id=st.session_state.conversation_id
             )
             
-            # 直前の質問を更新
             st.session_state.last_bot_message = answer_text
             
-            # 【追加】回答テキストを音声に変換してセット
+            # 回答の音声化
             audio_tag = text_to_speech_autoplay(answer_text)
             st.session_state.audio_html = audio_tag
 
-            # 画面更新してAIの回答と音声プレーヤーを表示
             st.rerun()
