@@ -201,18 +201,15 @@ with chat_container:
     if st.session_state.audio_html:
         st.markdown(st.session_state.audio_html, unsafe_allow_html=True)
 
-# 5. 入力エリア（横並びレイアウト・位置調整版）
+# 5. 入力エリア（位置ズレ修正版）
 st.divider()
 
-# 入力が確定したときに呼ばれるコールバック関数
 def submit_text():
     st.session_state.input_to_process = st.session_state.temp_user_input
     st.session_state.temp_user_input = "" 
 
-# カラム作成: テキストエリア(6) : マイク(1)
-# vertical_alignment="bottom" だけでは合わない場合があるため "center" に変更してみる手もありますが、
-# ここではあえて bottom のまま、スペーサーで微調整します。
-col_input, col_mic = st.columns([6, 1], vertical_alignment="bottom")
+# 1. vertical_alignment を削除します（デフォルトの上揃えにする）
+col_input, col_mic = st.columns([6, 1])
 
 with col_input:
     st.text_input(
@@ -224,10 +221,9 @@ with col_input:
     )
 
 with col_mic:
-    # 【ここが修正点】
-    # マイクボタンを強制的に下に押し下げるための「透明な箱」を置きます。
-    # "margin-top: 8px;" の数字を増減させて、好みの位置に合わせてください。
-    st.markdown('<div style="margin-top: 24px;"></div>', unsafe_allow_html=True)
+    # 2. ここで「上からの距離」をピクセル単位で指定してボタンを押し下げます
+    # "8px" の数値を書き換えて、ちょうどいい高さに調整してください
+    st.markdown('<div style="padding-top: 8px;"></div>', unsafe_allow_html=True)
     
     audio = mic_recorder(
         start_prompt="🎤", 
