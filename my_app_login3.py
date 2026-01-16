@@ -145,7 +145,7 @@ def text_to_speech_autoplay(text):
     try:
         response = openai_client.audio.speech.create(
             model="tts-1-hd", # 高音質モデル
-            voice="nova",     # 日本語に適した声 (alloyは訛りやすい)
+            voice="onyx",     # 日本語に適した声 (alloyは訛りやすい)
             input=text
         )
         
