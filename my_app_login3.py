@@ -227,7 +227,7 @@ with col_mic:
     # 【ここが修正点】
     # マイクボタンを強制的に下に押し下げるための「透明な箱」を置きます。
     # "margin-top: 8px;" の数字を増減させて、好みの位置に合わせてください。
-    st.markdown('<div style="margin-top: 8px;"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="margin-top: 24px;"></div>', unsafe_allow_html=True)
     
     audio = mic_recorder(
         start_prompt="🎤", 
