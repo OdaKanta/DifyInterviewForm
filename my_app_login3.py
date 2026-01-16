@@ -64,10 +64,9 @@ def upload_local_file_to_dify(file_path, user_id):
             return None
 
 def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="streamlit_student"):
-    # --- 診断エリア（サイドバー） ---
+    # --- 診断ログ ---
     st.sidebar.markdown("---")
-    st.sidebar.warning("📡 通信診断ログ")
-    st.sidebar.write(f"Function called with file_id: `{uploaded_file_id}`")
+    st.sidebar.warning(f"📡 通信: {query[:5]}...")
     
     try:
         url = f"{BASE_URL}/chat-messages"
@@ -75,20 +74,17 @@ def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="st
         
         # --- ファイル変数の構築 ---
         if uploaded_file_id:
-            # 【重要修正 1】 リスト [ ] を外す（単一オブジェクトにする）
-            # 【重要修正 2】 type を "document" にする（YAMLの定義に合わせる）
+            # 【重要】リスト [] に入れず、単一の辞書として定義する
+            # 【重要】type は "document" (YAML定義に合わせる)
             file_structure = {
-                "type": "document",           # YAMLで allowed_file_types: [document] となっているため
+                "type": "document", 
                 "transfer_method": "local_file",
                 "upload_file_id": uploaded_file_id
             }
-            
-            # リストに入れず、そのまま代入する
             inputs[FILE_VARIABLE_KEY] = file_structure
-            
-            st.sidebar.info("✅ ファイル変数をセットしました (Dict形式/type:document)")
+            st.sidebar.info("✅ ファイル添付あり (Dict形式)")
         else:
-            st.sidebar.write("ℹ️ ファイルIDがないため、ファイル変数は空で送ります")
+            st.sidebar.info("ℹ️ テキストのみ送信")
 
         payload = {
             "inputs": inputs,
@@ -98,19 +94,18 @@ def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="st
             "user": user_id,
         }
         
-        # --- JSONの中身をサイドバーにダンプ ---
-        st.sidebar.code(json.dumps(payload, indent=2, ensure_ascii=False), language="json")
+        # --- JSONダンプ ---
+        # st.sidebar.code(json.dumps(payload, indent=2, ensure_ascii=False), language="json")
         
-        # --- リクエスト送信 ---
-        st.sidebar.write("... API送信中 ...")
+        # --- 送信 ---
         response = requests.post(url, headers=headers, json=payload)
         
-        # --- 結果確認 ---
+        # --- 結果判定 ---
         if response.status_code == 200:
-            st.sidebar.success("🎉 成功 (200 OK)")
+            st.sidebar.success("OK")
             return response.json()
         else:
-            st.sidebar.error(f"❌ 失敗: {response.status_code}")
+            st.sidebar.error(f"エラー: {response.status_code}")
             try:
                 st.sidebar.json(response.json())
             except:
@@ -118,8 +113,7 @@ def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="st
             response.raise_for_status()
             
     except Exception as e:
-        st.error(f"⚠️ 内部処理エラー発生: {e}")
-        st.sidebar.error(f"例外詳細: {e}")
+        st.error(f"通信エラー: {e}")
         return None
 
 # --- ログ保存機能 ---
