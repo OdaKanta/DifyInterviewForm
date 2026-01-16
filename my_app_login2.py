@@ -109,6 +109,9 @@ elif st.session_state["authentication_status"]:
                             full_response += chunk["answer"]
                             response_placeholder.markdown(full_response + "▌")
 
+            st.write("DEBUG full_response:", repr(full_response))
+            st.write("length:", len(full_response))
+            
             response_placeholder.markdown(full_response)
             st.session_state.messages.append({"role": "assistant", "content": full_response})
 
