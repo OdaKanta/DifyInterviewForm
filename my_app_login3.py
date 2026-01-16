@@ -66,14 +66,15 @@ def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="st
     url = f"{BASE_URL}/chat-messages"
     inputs = {}
     
-    # --- ファイルデータの構築 ---
+    # --- 【修正点】ファイルIDがある場合、必ずリスト [ ] で囲む ---
     if uploaded_file_id:
-        # まずは「リスト型 []」で試してみます（これが正解の可能性が高いため）
-        inputs[FILE_VARIABLE_KEY] = [{
+        file_obj = {
             "type": "document", 
             "transfer_method": "local_file",
             "upload_file_id": uploaded_file_id
-        }]
+        }
+        # ここが重要：単体でもリストに入れる
+        inputs[FILE_VARIABLE_KEY] = [file_obj] 
 
     payload = {
         "inputs": inputs,
@@ -83,19 +84,20 @@ def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="st
         "user": user_id,
     }
     
-    # --- 【デバッグ表示】ブラウザ画面にデータを出力 ---
-    with st.expander("🔍 デバッグ用: 送信データの中身", expanded=True):
-        st.write("Difyに以下のデータを送信します:")
-        st.json(payload)  # ここでJSONが綺麗に表示されます
+    # --- 【デバッグ】画面に強制表示（st.write使用） ---
+    st.write("--- 🚀 Difyへの送信データ (Debug) ---")
+    st.write(payload) # JSONの中身をそのまま表示
+    st.write("---------------------------------------")
     # -----------------------------------------------
 
     try:
         response = requests.post(url, headers=headers, json=payload)
         
-        # エラー時の表示
+        # エラー時の詳細表示
         if response.status_code != 200:
             st.error(f"APIエラー: {response.status_code}")
-            # エラーレスポンスも画面に表示
+            st.error("▼ Difyからのエラーメッセージ")
+            # エラーレスポンスをJSONとして表示、失敗したらテキストで
             try:
                 st.json(response.json())
             except:
@@ -105,6 +107,7 @@ def send_chat_message(query, conversation_id, uploaded_file_id=None, user_id="st
         return response.json()
         
     except Exception as e:
+        # 呼び出し元でNone判定するためにここではNoneを返す
         return None
 
 # --- ログ保存機能 ---
