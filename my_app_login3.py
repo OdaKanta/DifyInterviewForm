@@ -176,11 +176,10 @@ if not st.session_state.conversation_id:
                 st.error("ファイルのアップロードに失敗しました。")
                 st.stop()
         
-        # 【修正】ここを「ボットへの指示」に変えます
-        # 以前: "授業内容について学んだことを教えてください。" (これをユーザが言ったことになっていた)
-        # 今回: ボットに「そのセリフを言ってくれ」と命令します。
-        initial_instruction = "面接を開始します。私（学習者）に対して、まずは『授業内容について学んだことを教えてください。』という質問から始めてください。挨拶や前置きは不要です。"
-
+        # 1. 裏でDifyに会話を開始させる（IDを取得するためだけに送る）
+        # 内容はなんでもいいですが、文脈を作るために指示を送っておきます
+        initial_instruction = "面接を開始します。学習者に対して授業内容の質問を始めてください。"
+        
         initial_res = send_chat_message(
             query=initial_instruction, 
             conversation_id="",
@@ -190,12 +189,16 @@ if not st.session_state.conversation_id:
         
         if initial_res:
             st.session_state.conversation_id = initial_res.get('conversation_id')
-            welcome_msg = initial_res.get('answer', '')
             
-            # これで welcome_msg に「授業内容について～」が入ってくるはずです
-            st.session_state.messages.append({"role": "assistant", "content": welcome_msg})
-            st.session_state.last_bot_message = welcome_msg
-            st.session_state.audio_html = text_to_speech_autoplay(welcome_msg)
+            # 【ここが修正点】
+            # AIからの返答(initial_res['answer'])は無視して捨てます！
+            # 代わりに、表示させたい「理想の第一声」を強制的にセットします。
+            forced_first_message = "授業内容について学んだことを教えてください。"
+            
+            st.session_state.messages.append({"role": "assistant", "content": forced_first_message})
+            st.session_state.last_bot_message = forced_first_message
+            st.session_state.audio_html = text_to_speech_autoplay(forced_first_message)
+            
             st.rerun()
 
 # 4. チャット履歴の表示
