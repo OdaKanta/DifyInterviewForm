@@ -28,7 +28,13 @@ authenticator = stauth.Authenticate(
 # --- 2. ログイン画面の表示 ---
 authenticator.login('main')
 
-if st.session_state["authentication_status"]:
+# ログイン状態のチェック
+if st.session_state["authentication_status"] == False:
+    st.error('ユーザー名またはパスワードが間違っています')
+elif st.session_state["authentication_status"] == None:
+    st.warning('ユーザー名とパスワードを入力してください')
+elif st.session_state["authentication_status"]:
+    # ログイン成功時の情報を取得
     username = st.session_state["username"]
     name = st.session_state["name"]
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
@@ -39,13 +45,23 @@ if st.session_state["authentication_status"]:
     with st.sidebar:
         st.write(f"ようこそ、{name} さん")
         authenticator.logout('ログアウト', 'sidebar')
+        
+        # デバッグ用：現在の会話IDを表示（不要なら消してもOK）
+        if "conversation_id" in st.session_state:
+            st.caption(f"Conversation ID: {st.session_state.conversation_id}")
 
-    st.title("音声対応AIアシスタント (ログ収集付)")
+    st.title("音声対応AIアシスタント (ログ収集+debug付)")
 
+    # 会話履歴と会話IDの初期化
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "conversation_id" not in st.session_state:
         st.session_state.conversation_id = ""
+
+    # 過去の表示
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
     # --- 音声・テキスト入力処理 (前回と同じ) ---
     st.write("話しかけてください：")
@@ -62,11 +78,6 @@ if st.session_state["authentication_status"]:
     chat_input = st.chat_input("またはメッセージを入力...")
     if chat_input:
         user_input = chat_input
-
-    # 過去の表示
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
 
     # --- メイン処理 (Dify送信 & ログ保存) ---
     if user_input:
@@ -100,6 +111,20 @@ if st.session_state["authentication_status"]:
 
             response_placeholder.markdown(full_response)
             st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+            # --- 音声出力 (OpenAI TTS) ---
+            with st.spinner("音声を生成中..."):
+                safe_text = full_response[:500]  # 文字数制限
+                safe_text = safe_text.strip()    # 空白や改行を削除
+                if safe_text != "":
+                    tts_response = client.audio.speech.create(
+                        model="gpt-4o-mini-tts",
+                        voice="alloy",
+                        input=safe_text
+                    )
+                    st.audio(io.BytesIO(tts_response.content), format="audio/mp3", autoplay=True)
+                else:
+                    st.info("音声化するテキストがありません。")
 
             # --- ★ここからログ書き込み処理 ---
             try:
@@ -137,17 +162,3 @@ if st.session_state["authentication_status"]:
                 
             except Exception as e:
                 st.error(f"ログ保存エラー: {e}")
-
-            # --- 音声出力 (OpenAI TTS) ---
-            with st.spinner("音声を生成中..."):
-                safe_text = full_response[:500]  # 文字数制限
-                safe_text = safe_text.strip()    # 空白や改行を削除
-                if safe_text != "":
-                    tts_response = client.audio.speech.create(
-                        model="gpt-4o-mini-tts",
-                        voice="alloy",
-                        input=safe_text
-                    )
-                    st.audio(io.BytesIO(tts_response.content), format="audio/mp3", autoplay=True)
-                else:
-                    st.info("音声化するテキストがありません。")
