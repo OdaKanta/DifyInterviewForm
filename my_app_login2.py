@@ -50,7 +50,7 @@ elif st.session_state["authentication_status"]:
         if "conversation_id" in st.session_state:
             st.caption(f"Conversation ID: {st.session_state.conversation_id}")
 
-    st.title("音声対応AIアシスタント (ログ収集+debug付)")
+    st.title("音声対応AIアシスタント (ログ収集+debug付, file対応)")
 
     # 会話履歴と会話IDの初期化
     if "messages" not in st.session_state:
