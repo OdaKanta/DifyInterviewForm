@@ -91,14 +91,16 @@ elif st.session_state["authentication_status"]:
 
             DIFY_KEY = st.secrets["DIFY_API_KEY"]
             headers = {"Authorization": f"Bearer {DIFY_KEY}", "Content-Type": "application/json"}
-            files = {
-                "material": {  # これは Dify 側で作った Input フィールド名に合わせる
+            files = [
+                {
+                    "name": "material",          # Dify 側の入力フィールド名
                     "type": "file",
                     "transfer_method": "remote_url",
                     #"url": "https://odakanta.github.io/DifyInterviewForm/CV11.pdf"
                     "url": "https://raw.githubusercontent.com/odakanta/DifyInterviewForm/main/CV11.pdf"
                 }
-            }
+            ]
+
             data = {
                 "inputs": {},
                 "query": user_input,
@@ -107,6 +109,7 @@ elif st.session_state["authentication_status"]:
                 "conversation_id": st.session_state.conversation_id,
                 "files": files
             }
+            
             response = requests.post("https://api.dify.ai/v1/chat-messages", headers=headers, json=data, stream=True)
 
             for line in response.iter_lines():
