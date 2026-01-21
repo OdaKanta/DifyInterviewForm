@@ -21,7 +21,7 @@ openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 BASE_URL = "https://api.dify.ai/v1"
 FILE_VARIABLE_KEY = "material"
-FIXED_FILE_PATH = "NLP11.pdf"
+FIXED_FILE_PATH = "CV11.pdf"
 
 headers = {
     "Authorization": f"Bearer {DIFY_API_KEY}"
@@ -132,7 +132,7 @@ def text_to_speech_autoplay(text):
 # メイン処理
 # ==========================================
 st.set_page_config(page_title="講義の復習", page_icon="🤖")
-st.title("🤖 講義振り返りインタビュアー位置調整2")
+st.title("🤖 講義振り返りインタビュアー")
 
 login()
 current_user = st.session_state.username
