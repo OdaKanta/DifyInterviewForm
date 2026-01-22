@@ -119,14 +119,21 @@ def save_log_to_sheet(username, user_input, bot_question, conversation_id):
         conn.update(spreadsheet=st.secrets["spreadsheet_url"], data=updated_df)
     except Exception as e:
         st.error(f"ログ保存エラー: {e}")
-
-# --- 音声処理関数 ---
 def transcribe_audio(audio_bytes):
     try:
+        import io
         audio_file = io.BytesIO(audio_bytes)
         audio_file.name = "input.wav"
+        
+        # 認識させたい専門用語
+        vocab_prompt = ("東京特許許可局")
+
         transcript = openai_client.audio.transcriptions.create(
-            model="whisper-1", file=audio_file, language="ja"
+            model="whisper-1", 
+            file=audio_file, 
+            language="ja",
+            prompt=vocab_prompt,
+            temperature=0.0
         )
         return transcript.text
     except Exception as e:
