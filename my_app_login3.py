@@ -246,17 +246,54 @@ with chat_container:
     if st.session_state.audio_html:
         st.markdown(st.session_state.audio_html, unsafe_allow_html=True)
 
-# 5. 入力エリア（位置ズレ修正版）
+# 5. 入力エリア & 6. 入力処理ロジック（統合・順序修正版）
 st.divider()
 
 def submit_text():
     st.session_state.input_to_process = st.session_state.temp_user_input
     st.session_state.temp_user_input = "" 
 
-# 1. vertical_alignment を削除します（デフォルトの上揃えにする）
+# レイアウト定義（見た目は 左:入力、右:マイク）
 col_input, col_mic = st.columns([6, 1])
 
+# 【重要】実行順序の変更
+# 見た目は「右」ですが、コード上は「マイク」を先に処理します。
+# こうすることで、テキスト入力欄が描画される「前」に音声を文字に変換してセットできます。
+
+# --- A. マイク入力と音声処理（先出し） ---
+with col_mic:
+    st.markdown('<div style="padding-top: 8px;"></div>', unsafe_allow_html=True)
+    audio = mic_recorder(
+        start_prompt="🎤", 
+        stop_prompt="⏹️", 
+        key='recorder', 
+        format="wav"
+    )
+
+# 音声データがある場合、すぐに処理して session_state を更新する
+if audio:
+    if audio['bytes'] != st.session_state.prev_audio_bytes:
+        st.session_state.prev_audio_bytes = audio['bytes']
+        
+        with st.spinner("音声認識中..."):
+            transcribed_text = transcribe_audio(audio['bytes'])
+            if transcribed_text:
+                corrected_text = correct_transcript(transcribed_text)
+                
+                # 【ここが修正のキモ】
+                # まだテキスト入力欄は描画されていないので、ここで値をセットしてもエラーになりません！
+                st.session_state.temp_user_input = corrected_text
+                
+                # 前のボットの音声を停止
+                st.session_state.audio_html = None
+                
+                # ここで rerun する必要はありません。
+                # このまま下のコードに進めば、自然に新しい値が入った状態で入力欄が表示されます。
+
+# --- B. テキスト入力エリア（後出し） ---
 with col_input:
+    # ここで初めて入力欄が描画されます。
+    # 上の処理で temp_user_input に値が入っていれば、それが初期値として表示されます。
     st.text_input(
         label="メッセージ入力",
         key="temp_user_input",
@@ -265,46 +302,16 @@ with col_input:
         on_change=submit_text
     )
 
-with col_mic:
-    audio = mic_recorder(
-        start_prompt="🎤", 
-        stop_prompt="⏹️", 
-        key='recorder', 
-        format="wav"
-    )
-
-# 6. 入力処理ロジック
+# --- C. 送信処理（Enterが押された後の処理） ---
+# コールバック(submit_text)によって input_to_process に値が入っていたら実行
 final_prompt = None
 
-# A. 音声入力チェック（修正：認識結果を入力欄に入れて、ユーザー確認を待つ）
-if audio:
-    if audio['bytes'] != st.session_state.prev_audio_bytes:
-        st.session_state.prev_audio_bytes = audio['bytes']
-        with st.spinner("音声認識中..."):
-            transcribed_text = transcribe_audio(audio['bytes'])
-            if transcribed_text:
-                corrected_text = correct_transcript(transcribed_text) # AIによる補正
-                
-                # 【重要変更】
-                # ここで即送信(final_promptへの代入)はせず、
-                # 入力欄の変数(temp_user_input)に入れて画面をリロードします。
-                st.session_state.temp_user_input = corrected_text
-                
-                # 前のボットの音声を停止
-                st.session_state.audio_html = None
-                
-                # 画面を更新して入力欄に文字を表示
-                st.rerun()
-    else:
-        pass
-
-# B. テキスト入力チェック（コールバック経由：Enterが押されたらここに来ます）
-elif st.session_state.input_to_process:
+if st.session_state.input_to_process:
     final_prompt = st.session_state.input_to_process
     st.session_state.input_to_process = None
     st.session_state.audio_html = None
 
-# C. 送信処理
+# 送信実行
 if final_prompt:
     st.session_state.messages.append({"role": "user", "content": final_prompt})
     
