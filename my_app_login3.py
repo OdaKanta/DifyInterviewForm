@@ -260,22 +260,24 @@ with col_mic:
 # 6. 入力処理ロジック
 final_prompt = None
 
-# A. 音声入力チェック
+# A. 音声入力チェック（即送信せず、入力欄に入れる）
 if audio:
     if audio['bytes'] != st.session_state.prev_audio_bytes:
         st.session_state.prev_audio_bytes = audio['bytes']
+        
         with st.spinner("音声認識中..."):
             transcribed_text = transcribe_audio(audio['bytes'])
             if transcribed_text:
-                final_prompt = transcribed_text
-                st.session_state.audio_html = None
+                # final_prompt に入れず、入力欄の session_state に代入してリランする
+                st.session_state.temp_user_input = transcribed_text
+                st.rerun() # 画面を更新して、入力欄に文字を表示させる
     else:
         pass
 
-# B. テキスト入力チェック（コールバック経由）
+# B. テキスト入力チェック（ユーザーがEnterを押した瞬間にここが動く）
 elif st.session_state.input_to_process:
     final_prompt = st.session_state.input_to_process
-    st.session_state.input_to_process = None # 処理済みフラグを下ろす
+    st.session_state.input_to_process = None
     st.session_state.audio_html = None
 
 # C. 送信処理
