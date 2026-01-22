@@ -27,18 +27,36 @@ headers = {
     "Authorization": f"Bearer {DIFY_API_KEY}"
 }
 
-# --- ログイン機能 ---
+# --- ログイン機能（パスワード認証版） ---
 def login():
+    """IDとパスワードによる認証機能"""
     if "username" not in st.session_state:
         st.session_state.username = None
+
     if not st.session_state.username:
         with st.form("login_form"):
-            st.write("学習を開始するにはID（氏名または学籍番号）を入力してください")
+            st.write("学習を開始するにはログインしてください")
+            
+            # ユーザーID入力
             username_input = st.text_input("ユーザーID")
-            submitted = st.form_submit_button("開始")
-            if submitted and username_input:
-                st.session_state.username = username_input
-                st.rerun()
+            # パスワード入力（type="password"で文字を隠す）
+            password_input = st.text_input("パスワード", type="password")
+            
+            submitted = st.form_submit_button("ログイン")
+            
+            if submitted:
+                # 1. IDが secrets に存在するか？
+                if username_input in st.secrets["passwords"]:
+                    # 2. パスワードが一致するか？
+                    correct_password = st.secrets["passwords"][username_input]
+                    if password_input == correct_password:
+                        st.session_state.username = username_input
+                        st.success("ログイン成功！")
+                        st.rerun()
+                    else:
+                        st.error("パスワードが間違っています。")
+                else:
+                    st.error("ユーザーIDが見つかりません。")
         st.stop()
 
 # --- Dify連携関数群 ---
