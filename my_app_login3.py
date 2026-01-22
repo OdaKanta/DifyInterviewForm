@@ -119,6 +119,7 @@ def save_log_to_sheet(username, user_input, bot_question, conversation_id):
         conn.update(spreadsheet=st.secrets["spreadsheet_url"], data=updated_df)
     except Exception as e:
         st.error(f"ログ保存エラー: {e}")
+
 def transcribe_audio(audio_bytes):
     try:
         import io
@@ -139,6 +140,21 @@ def transcribe_audio(audio_bytes):
     except Exception as e:
         st.error(f"音声認識エラー: {e}")
         return ""
+
+def correct_transcript(text):
+    """Whisperの誤認識をLLMで直す関数"""
+    try:
+        completion = openai_client.chat.completions.create(
+            model="gpt-4o-mini", # 高速・安価なモデル
+            messages=[
+                {"role": "system", "content": "あなたは優秀な編集者です。以下のテキストは、コンピュータビジョンの講義に関する音声認識結果です。文脈を考慮して、明らかな誤字（同音異義語など）を修正してください。元の意味を大きく変えたり、余計な返事をしたりしないでください。修正後のテキストのみを出力してください。"},
+                {"role": "user", "content": text}
+            ],
+            temperature=0
+        )
+        return completion.choices[0].message.content
+    except:
+        return text
 
 def text_to_speech_autoplay(text):
     try:
@@ -260,24 +276,23 @@ with col_mic:
 # 6. 入力処理ロジック
 final_prompt = None
 
-# A. 音声入力チェック（即送信せず、入力欄に入れる）
+# A. 音声入力チェック
 if audio:
     if audio['bytes'] != st.session_state.prev_audio_bytes:
         st.session_state.prev_audio_bytes = audio['bytes']
-        
         with st.spinner("音声認識中..."):
             transcribed_text = transcribe_audio(audio['bytes'])
             if transcribed_text:
-                # final_prompt に入れず、入力欄の session_state に代入してリランする
-                st.session_state.temp_user_input = transcribed_text
-                st.rerun() # 画面を更新して、入力欄に文字を表示させる
+                corrected_text = correct_transcript(transcribed_text) # 補正
+                final_prompt = corrected_text
+                st.session_state.audio_html = None
     else:
         pass
 
-# B. テキスト入力チェック（ユーザーがEnterを押した瞬間にここが動く）
+# B. テキスト入力チェック（コールバック経由）
 elif st.session_state.input_to_process:
     final_prompt = st.session_state.input_to_process
-    st.session_state.input_to_process = None
+    st.session_state.input_to_process = None # 処理済みフラグを下ろす
     st.session_state.audio_html = None
 
 # C. 送信処理
