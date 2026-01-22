@@ -21,7 +21,7 @@ openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 BASE_URL = "https://api.dify.ai/v1"
 FILE_VARIABLE_KEY = "material"
-FIXED_FILE_PATH = "CV11.pdf"
+FIXED_FILE_PATH = "geology01.pdf"
 
 headers = {
     "Authorization": f"Bearer {DIFY_API_KEY}"
