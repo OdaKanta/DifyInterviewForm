@@ -262,7 +262,6 @@ col_input, col_mic = st.columns([6, 1])
 
 # --- A. マイク入力と音声処理（先出し） ---
 with col_mic:
-    st.markdown('<div style="padding-top: 8px;"></div>', unsafe_allow_html=True)
     audio = mic_recorder(
         start_prompt="🎤", 
         stop_prompt="⏹️", 
