@@ -22,7 +22,10 @@ openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 BASE_URL = "https://api.dify.ai/v1"
 FILE_VARIABLE_KEY = "material"
-FIXED_FILE_PATH = "geology01.pdf"
+MATERIALS = {
+    "地学基礎　第1講": "geology01.pdf",
+    "地学基礎　第3講": "geology03.pdf"
+}
 
 headers = {
     "Authorization": f"Bearer {DIFY_API_KEY}"
@@ -105,7 +108,7 @@ def send_chat_message(query, conversation_id, file_id_to_send, user_id):
 def save_log_to_sheet(username, user_input, bot_question, conversation_id):
     try:
         now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S')
-        new_row = [now, username, user_input, bot_question, conversation_id]
+        new_row = [conversation_id, username, material_name, bot_question, user_input, now]
         
         # Secretsからサービスアカウント情報を取得して直接認証
         # st.secrets["connections"]["gsheets"] の構造に合わせて指定してください
@@ -186,18 +189,36 @@ if "conversation_id" not in st.session_state:
     st.session_state.conversation_id = ""
 if "current_file_id" not in st.session_state:
     st.session_state.current_file_id = None
+if "selected_material" not in st.session_state:
+    st.session_state.selected_material = None
 if "last_bot_message" not in st.session_state:
     st.session_state.last_bot_message = ""
 if "audio_html" not in st.session_state:
     st.session_state.audio_html = None
 if "prev_audio_bytes" not in st.session_state:
     st.session_state.prev_audio_bytes = None
-
-# 【追加】テキスト入力処理用の一時変数
 if "temp_user_input" not in st.session_state:
     st.session_state.temp_user_input = ""
 if "input_to_process" not in st.session_state:
     st.session_state.input_to_process = None
+
+# 1. 講義資料の選択インターフェース
+if not st.session_state.selected_material:
+    st.subheader("📚 学習する講義資料を選択してください")
+    selected = st.radio(
+        "講義リスト",
+        options=list(MATERIALS.keys()),
+        index=None,
+        placeholder="選択してください..."
+    )
+    
+    if st.button("学習を開始する") and selected:
+        st.session_state.selected_material = selected
+        st.rerun()
+    st.stop() # 選択されるまで下の処理（チャット）に進まない
+
+# 選択された情報を保持
+target_material_path = MATERIALS[st.session_state.selected_material]
 
 # --- 緊急リセット ---
 if st.sidebar.button("⚠️ 会話をリセット"):
@@ -214,7 +235,7 @@ if not st.session_state.conversation_id:
             
             # 1. ファイルアップロードだけは済ませておく（ID確保）
             if not st.session_state.current_file_id:
-                file_id = upload_local_file_to_dify(FIXED_FILE_PATH, current_user)
+                file_id = upload_local_file_to_dify(target_material_path, current_user)
                 if file_id:
                     st.session_state.current_file_id = file_id
                 else:
@@ -332,10 +353,11 @@ if final_prompt:
             st.session_state.messages.append({"role": "assistant", "content": answer_text})
             
             save_log_to_sheet(
-                username=current_user,
-                user_input=final_prompt,
-                bot_question=st.session_state.last_bot_message, 
-                conversation_id=st.session_state.conversation_id
+                session=st.session_state.conversation_id,
+                user=current_user,
+                material=st.session_state.selected_material,
+                system_question=st.session_state.last_bot_message,
+                user_answer=final_prompt
             )
             
             st.session_state.last_bot_message = answer_text
