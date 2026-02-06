@@ -104,19 +104,12 @@ def send_chat_message(query, conversation_id, file_id_to_send, user_id):
 def save_log_to_sheet(username, user_input, bot_question, conversation_id):
     try:
         now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S')
-        existing_data = conn.read(spreadsheet=st.secrets["spreadsheet_url"], ttl=0)
-        new_row = pd.DataFrame([{
-            "date": now,
-            "user_id": username,
-            "user_input": user_input,
-            "ai_response": bot_question,
-            "conversation_id": conversation_id
-        }])
-        if existing_data.empty:
-            updated_df = new_row
-        else:
-            updated_df = pd.concat([existing_data, new_row], ignore_index=True)
-        conn.update(spreadsheet=st.secrets["spreadsheet_url"], data=updated_df)
+        
+        new_row = [now, username, user_input, bot_question, conversation_id]
+        
+        client = conn._instance
+        sheet = client.open_by_url(st.secrets["spreadsheet_url"]).get_worksheet(0)
+        sheet.append_row(new_row)
     except Exception as e:
         st.error(f"ログ保存エラー: {e}")
 
