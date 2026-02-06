@@ -308,7 +308,7 @@ if audio:
         st.session_state.prev_audio_bytes = audio['bytes']
         
         with st.spinner("音声認識中..."):
-            transcribed_text = transcribe_audio(audio['bytes'])
+            transcribed_text = transcribe_audio(audio['bytes'], target_keyword_path)
             if transcribed_text:
                 corrected_text = correct_transcript(transcribed_text)
                 
