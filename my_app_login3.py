@@ -289,9 +289,11 @@ def submit_text():
 # レイアウト定義（見た目は 左:入力、右:マイク）
 col_input, col_mic = st.columns([6, 1])
 
-material_info = MATERIALS[st.session_state.selected_material]
-target_material_path = material_info["pdf"]
-target_keyword_path = material_info["keywords"]
+# material_info = MATERIALS[st.session_state.selected_material]
+# target_material_path = material_info["pdf"]
+target_material_path = MATERIALS[st.session_state.selected_material]["pdf"]
+# target_keyword_path = material_info["keywords"]
+target_keyword_path = MATERIALS[st.session_state.selected_material]["keywords"]
 
 # --- A. マイク入力と音声処理（先出し） ---
 with col_mic:
