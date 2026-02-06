@@ -105,10 +105,10 @@ def send_chat_message(query, conversation_id, file_id_to_send, user_id):
         return None
 
 # --- ログ保存機能 ---
-def save_log_to_sheet(username, user_input, bot_question, conversation_id):
+def save_log_to_sheet(session, user, material, system_question, user_answer):
     try:
-        now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S')
-        new_row = [conversation_id, username, material_name, bot_question, user_input, now]
+        created_date = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S')
+        new_row = [session, user, material, system_question, user_answer, created_date]
         
         # Secretsからサービスアカウント情報を取得して直接認証
         # st.secrets["connections"]["gsheets"] の構造に合わせて指定してください
