@@ -364,7 +364,7 @@ if final_prompt:
         if response:
             st.session_state.conversation_id = response.get('conversation_id')
             answer_text = response.get('answer', '')
-            is_finished = response.get('metadata', {}).get('workflow_outputs', {}).get('is_completed', False)
+            is_finished = response.get('metadata', {}).get('workflow_outputs', {}).get('is_finished', False)
             if is_finished:
                 st.session_state.is_completed = True
             st.session_state.messages.append({"role": "assistant", "content": answer_text})
