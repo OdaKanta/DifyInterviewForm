@@ -23,8 +23,8 @@ openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 BASE_URL = "https://api.dify.ai/v1"
 FILE_VARIABLE_KEY = "material"
 MATERIALS = {
-    "地学基礎　第1講": "geology01.pdf",
-    "地学基礎　第3講": "geology03.pdf"
+    "地学基礎　第1講": {"pdf": "geology01.pdf", "keywords": "keywords01.txt"},
+    "地学基礎　第3講": {"pdf": "geology03.pdf", "keywords": "keywords03.txt"}
 }
 
 headers = {
@@ -123,20 +123,24 @@ def save_log_to_sheet(session, user, material, system_question, user_answer):
     except Exception as e:
         st.error(f"ログ保存エラー (追記失敗): {e}")
 
-def transcribe_audio(audio_bytes):
+def transcribe_audio(audio_bytes, keyword_file):
     try:
-        import io
+        # キーワードファイルの読み込み
+        vocab_prompt = ""
+        if os.path.exists(keyword_file):
+            with open(keyword_file, "r", encoding="utf-8") as f:
+                # 一行一語をカンマ区切りの文字列に変換
+                lines = [line.strip() for line in f if line.strip()]
+                vocab_prompt = ",".join(lines)
+        
         audio_file = io.BytesIO(audio_bytes)
         audio_file.name = "input.wav"
         
-        # 認識させたい専門用語
-        vocab_prompt = ("東京特許許可局")
-
         transcript = openai_client.audio.transcriptions.create(
             model="whisper-1", 
             file=audio_file, 
             language="ja",
-            prompt=vocab_prompt,
+            prompt=vocab_prompt, # 読み込んだキーワードをセット
             temperature=0.0
         )
         return transcript.text
@@ -201,6 +205,8 @@ if "temp_user_input" not in st.session_state:
     st.session_state.temp_user_input = ""
 if "input_to_process" not in st.session_state:
     st.session_state.input_to_process = None
+if "is_completed" not in st.session_state:
+    st.session_state.is_completed = False
 
 # 1. 講義資料の選択インターフェース
 if not st.session_state.selected_material:
@@ -269,6 +275,10 @@ with chat_container:
     if st.session_state.audio_html:
         st.markdown(st.session_state.audio_html, unsafe_allow_html=True)
 
+if st.session_state.is_completed:
+    st.success("🎉 全ての学習項目を確認しました。お疲れ様でした！")
+    st.balloons() # お祝いの演出
+
 # 5. 入力エリア & 6. 入力処理ロジック（統合・順序修正版）
 st.divider()
 
@@ -279,9 +289,9 @@ def submit_text():
 # レイアウト定義（見た目は 左:入力、右:マイク）
 col_input, col_mic = st.columns([6, 1])
 
-# 【重要】実行順序の変更
-# 見た目は「右」ですが、コード上は「マイク」を先に処理します。
-# こうすることで、テキスト入力欄が描画される「前」に音声を文字に変換してセットできます。
+material_info = MATERIALS[st.session_state.selected_material]
+target_material_path = material_info["pdf"]
+target_keyword_path = material_info["keywords"]
 
 # --- A. マイク入力と音声処理（先出し） ---
 with col_mic:
@@ -352,6 +362,9 @@ if final_prompt:
         if response:
             st.session_state.conversation_id = response.get('conversation_id')
             answer_text = response.get('answer', '')
+            is_finished = response.get('metadata', {}).get('workflow_outputs', {}).get('is_completed', False)
+            if is_finished:
+                st.session_state.is_completed = True
             st.session_state.messages.append({"role": "assistant", "content": answer_text})
             
             save_log_to_sheet(
