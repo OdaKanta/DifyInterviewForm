@@ -11,6 +11,7 @@ import io
 # --- 追加ライブラリ ---
 from streamlit_mic_recorder import mic_recorder
 from openai import OpenAI
+import gspread
 
 # --- スプレッドシート接続 ---
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -104,14 +105,20 @@ def send_chat_message(query, conversation_id, file_id_to_send, user_id):
 def save_log_to_sheet(username, user_input, bot_question, conversation_id):
     try:
         now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S')
-        
         new_row = [now, username, user_input, bot_question, conversation_id]
         
-        client = conn._instance
-        sheet = client.open_by_url(st.secrets["spreadsheet_url"]).get_worksheet(0)
-        sheet.append_row(new_row)
+        # Secretsからサービスアカウント情報を取得して直接認証
+        # st.secrets["connections"]["gsheets"] の構造に合わせて指定してください
+        creds_dict = st.secrets["connections"]["gsheets"]
+        gc = gspread.service_account_from_dict(creds_dict)
+        
+        # スプレッドシートを開いて1行追記
+        sh = gc.open_by_url(st.secrets["spreadsheet_url"])
+        ws = sh.get_worksheet(0)
+        ws.append_row(new_row)
+        
     except Exception as e:
-        st.error(f"ログ保存エラー: {e}")
+        st.error(f"ログ保存エラー (追記失敗): {e}")
 
 def transcribe_audio(audio_bytes):
     try:
