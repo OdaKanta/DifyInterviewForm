@@ -208,13 +208,15 @@ if not st.session_state.selected_material:
     selected = st.radio(
         "講義リスト",
         options=list(MATERIALS.keys()),
-        index=None,
-        placeholder="選択してください..."
+        index=None
     )
     
-    if st.button("学習を開始する") and selected:
-        st.session_state.selected_material = selected
-        st.rerun()
+    if st.button("学習を開始する"):
+        if selected:
+            st.session_state.selected_material = selected
+            st.rerun()
+        else:
+            st.warning("講義資料を選択してください。")
     st.stop() # 選択されるまで下の処理（チャット）に進まない
 
 # 選択された情報を保持
