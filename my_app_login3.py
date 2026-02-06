@@ -225,8 +225,9 @@ if not st.session_state.selected_material:
             st.warning("講義資料を選択してください。")
     st.stop() # 選択されるまで下の処理（チャット）に進まない
 
-# 選択された情報を保持
-target_material_path = MATERIALS[st.session_state.selected_material]
+material_info = MATERIALS[st.session_state.selected_material]
+target_material_path = material_info["pdf"]
+target_keyword_path = material_info["keywords"]
 
 # --- 緊急リセット ---
 if st.sidebar.button("⚠️ 会話をリセット"):
@@ -288,12 +289,6 @@ def submit_text():
 
 # レイアウト定義（見た目は 左:入力、右:マイク）
 col_input, col_mic = st.columns([6, 1])
-
-# material_info = MATERIALS[st.session_state.selected_material]
-# target_material_path = material_info["pdf"]
-target_material_path = MATERIALS[st.session_state.selected_material]["pdf"]
-# target_keyword_path = material_info["keywords"]
-target_keyword_path = MATERIALS[st.session_state.selected_material]["keywords"]
 
 # --- A. マイク入力と音声処理（先出し） ---
 with col_mic:
