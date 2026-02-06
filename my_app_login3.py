@@ -132,9 +132,6 @@ def transcribe_audio(audio_bytes, keyword_file):
                 # 一行一語をカンマ区切りの文字列に変換
                 lines = [line.strip() for line in f if line.strip()]
                 vocab_prompt = ",".join(lines)
-        print("[DEBUG]", vocab_prompt)
-        st.info(f"読み込まれたキーワード: {vocab_prompt}")
-        st.sidebar.write("Debug (Keywords):", vocab_prompt)
         
         audio_file = io.BytesIO(audio_bytes)
         audio_file.name = "input.wav"
