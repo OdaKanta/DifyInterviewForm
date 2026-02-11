@@ -340,9 +340,9 @@ if "input_method" not in st.session_state:
 col_input, col_send, col_mic = st.columns([5, 1, 1])
 input_key = f"chat_input_text_{current_user}"
 
-default_text = ""
+display_value = ""
 if st.session_state.temp_user_input:
-    default_text = st.session_state.temp_user_input
+    display_value = st.session_state.temp_user_input
     st.session_state.input_method = "voice"
 
 with col_input:
