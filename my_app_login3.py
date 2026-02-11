@@ -125,14 +125,31 @@ def save_log_to_sheet(session, user, material, system_question, user_answer):
 
 def transcribe_audio(audio_bytes, keyword_file):
     try:
-        # キーワードファイルの読み込み
+        # 1. キーワードファイルの読み込みと整形
         vocab_prompt = ""
         if os.path.exists(keyword_file):
             with open(keyword_file, "r", encoding="utf-8") as f:
-                # 一行一語をカンマ区切りの文字列に変換
-                lines = [line.strip() for line in f if line.strip()]
-                vocab_prompt = ",".join(lines)
+                content = f.read()
+                
+            all_keywords = []
+            # 行ごとに分割（改行区切り対応）
+            for line in content.splitlines():
+                # 各行をさらにカンマで分割（カンマ区切り対応）
+                parts = line.split(',')
+                for p in parts:
+                    clean_word = p.strip()
+                    if clean_word:
+                        all_keywords.append(clean_word)
+            
+            # 重複を除去してカンマ区切りの文字列にする
+            unique_keywords = list(dict.fromkeys(all_keywords))
+            vocab_prompt = ",".join(unique_keywords)
         
+        # デバッグログ（vocab_promptの中身を確認）
+        print(f"[DEBUG] Whisper Prompt: {vocab_prompt}")
+        st.write(f"[DEBUG] Whisper Prompt: {vocab_prompt}")
+        
+        # 2. 音声認識の実行
         audio_file = io.BytesIO(audio_bytes)
         audio_file.name = "input.wav"
         
@@ -140,7 +157,7 @@ def transcribe_audio(audio_bytes, keyword_file):
             model="whisper-1", 
             file=audio_file, 
             language="ja",
-            prompt=vocab_prompt, # 読み込んだキーワードをセット
+            prompt=vocab_prompt, # 指示文なし。単語の羅列を直接渡すのが正解。
             temperature=0.0
         )
         return transcript.text
@@ -148,18 +165,52 @@ def transcribe_audio(audio_bytes, keyword_file):
         st.error(f"音声認識エラー: {e}")
         return ""
 
-def correct_transcript(text):
+def correct_transcript(text, keyword_file):
     """Whisperの誤認識をLLMで直す関数"""
     try:
-        completion = openai_client.chat.completions.create(
-            model="gpt-4o-mini", # 高速・安価なモデル
+        # 1. キーワードファイルの読み込みと整形
+        keywords_str = ""
+        if os.path.exists(keyword_file):
+            with open(keyword_file, "r", encoding="utf-8") as f:
+                content = f.read()
+                
+            all_keywords = []
+            # 行ごとに分割（改行区切り対応）
+            for line in content.splitlines():
+                # 各行をさらにカンマで分割（カンマ区切り対応）
+                parts = line.split(',')
+                for p in parts:
+                    clean_word = p.strip()
+                    if clean_word:
+                        all_keywords.append(clean_word)
+            
+            # 重複を除去してカンマ区切りの文字列にする
+            unique_keywords = list(dict.fromkeys(all_keywords))
+            keywords_str = ",".join(unique_keywords)
+
+        prompt = f"""
+        生徒が中学理科の授業について振り返った際の録音を文字起こししましたが、認識精度の限界により誤字脱字があるかもしれないので、修正してください。
+
+        ■ 修正の指示
+        - 元の文章の意図は保持する（学習者による間違った説明はあえて修正せずそのまま）。
+        - 誤字脱字や同音異義語の変換ミスを修正し、不要なフィラー（えー、あのー等）や無意味な文章を削除する。
+        - 出力は修正後の文章のみ出力し、余計な文章を勝手に付け加えてはならない。
+        - 修正箇所が見つからないほど短い入力の場合でも、文句を言わずにそのまま出力せよ。
+        
+        ■ 原文（いかに短くても、どうみてもまともな説明でなくても、文句を言ってはならない）
+        {text}
+
+        {f"■ 授業内容に含まれる重要語句（この単語への誤変換が疑われる場合に参考にせよ）: {keywords_str}" if keywords_str else ""}
+        """
+        response = openai_client.chat.completions.create(
+            model="gpt-4o", # 高速・安価なモデル
             messages=[
-                {"role": "system", "content": "あなたは優秀な校正者です。以下の文章はあるテキストの音声認識結果であり、日本語として不自然な文字や言葉、表現である可能性があります。文脈を考慮して、明らかな誤り（同音異義語など）を修正してください。元の意味は大きく変えてはいけません、余計な返事をせず、修正後のテキストのみを出力してください。"},
-                {"role": "user", "content": text}
+                {"role": "system", "content": "あなたは優秀な校正者です。音声書き起こしにみられる誤字脱字などを修正してください。"},
+                {"role": "user", "content": prompt}
             ],
-            temperature=0
+            temperature=0.0
         )
-        return completion.choices[0].message.content
+        return response.choices[0].message.content.strip()
     except:
         return text
 
@@ -179,8 +230,8 @@ def text_to_speech_autoplay(text):
 # ==========================================
 # メイン処理
 # ==========================================
-st.set_page_config(page_title="講義の復習", page_icon="🤖")
-st.title("🤖 講義振り返りインタビュアー")
+st.set_page_config(page_title="講義復習支援チャットボット", page_icon="🤖")
+st.title("講義復習支援チャットボット")
 
 login()
 current_user = st.session_state.username
@@ -267,7 +318,7 @@ if not st.session_state.conversation_id:
             st.rerun()
 
 # 4. チャット履歴の表示
-chat_container = st.container(height=500)
+chat_container = st.container(height=400)
 
 with chat_container:
     for msg in st.session_state.messages:
@@ -281,8 +332,6 @@ if st.session_state.is_completed:
     st.balloons() # お祝いの演出
 
 # 5. 入力エリア & 6. 入力処理ロジック（統合・順序修正版）
-st.divider()
-
 def submit_text():
     st.session_state.input_to_process = st.session_state.temp_user_input
     st.session_state.temp_user_input = "" 
@@ -294,7 +343,7 @@ col_input, col_mic = st.columns([6, 1])
 with col_mic:
     audio = mic_recorder(
         start_prompt="🎤", 
-        stop_prompt="⏹️", 
+        stop_prompt="🟥", 
         key='recorder', 
         format="wav"
     )
@@ -307,17 +356,10 @@ if audio:
         with st.spinner("音声認識中..."):
             transcribed_text = transcribe_audio(audio['bytes'], target_keyword_path)
             if transcribed_text:
-                corrected_text = correct_transcript(transcribed_text)
-                
-                # 【ここが修正のキモ】
-                # まだテキスト入力欄は描画されていないので、ここで値をセットしてもエラーになりません！
+                corrected_text = correct_transcript(transcribed_text, target_keyword_path)
                 st.session_state.temp_user_input = corrected_text
-                
                 # 前のボットの音声を停止
                 st.session_state.audio_html = None
-                
-                # ここで rerun する必要はありません。
-                # このまま下のコードに進めば、自然に新しい値が入った状態で入力欄が表示されます。
 
 # --- B. テキスト入力エリア（後出し） ---
 with col_input:
