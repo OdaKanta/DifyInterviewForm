@@ -98,6 +98,9 @@ def send_chat_message(query, conversation_id, file_id_to_send, user_id, material
     }
     try:
         response = requests.post(url, headers=headers, json=payload)
+        if response.status_code == 400:
+            # 400エラーの時はDifyからの詳細メッセージを表示
+            st.error(f"Difyエラー詳細: {response.text}") 
         response.raise_for_status()
         return response.json()
     except Exception as e:
