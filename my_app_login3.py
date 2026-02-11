@@ -391,6 +391,7 @@ if st.session_state.input_to_process:
     final_prompt = st.session_state.input_to_process
     st.session_state.input_to_process = None
     st.session_state.audio_html = None
+    st.session_state[input_key] = ""
 
 # 送信実行
 if final_prompt:
