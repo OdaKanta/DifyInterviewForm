@@ -330,12 +330,17 @@ if st.session_state.is_completed:
 # 5. 入力エリア & 6. 入力処理ロジック（統合・順序修正版）
 def submit_text():
     st.session_state.input_to_process = st.session_state[input_key]
-    st.session_state.temp_user_input = "" 
+    st.session_state[input_key] = "" 
 
 # 送信用ボタンを含むレイアウト
 col_input, col_send, col_mic = st.columns([5, 1, 1])
 input_key = f"input_{st.session_state.conversation_id}"
 with col_input:
+    # 音声認識結果がある場合は、セッション状態にセットしておく
+    if st.session_state.temp_user_input:
+        st.session_state[input_key] = st.session_state.temp_user_input
+        st.session_state.temp_user_input = "" # 消費したらクリア
+    
     user_text = st.text_input(
         label="メッセージ入力",
         key=input_key,
@@ -372,18 +377,6 @@ if audio:
                 st.session_state.temp_user_input = corrected_text
                 # 前のボットの音声を停止
                 st.session_state.audio_html = None
-
-# --- B. テキスト入力エリア（後出し） ---
-with col_input:
-    # ここで初めて入力欄が描画されます。
-    # 上の処理で temp_user_input に値が入っていれば、それが初期値として表示されます。
-    st.text_input(
-        label="メッセージ入力",
-        key="temp_user_input",
-        placeholder="テキストを入力してEnter...",
-        label_visibility="collapsed",
-        on_change=submit_text
-    )
 
 # --- C. 送信処理（Enterが押された後の処理） ---
 # コールバック(submit_text)によって input_to_process に値が入っていたら実行
