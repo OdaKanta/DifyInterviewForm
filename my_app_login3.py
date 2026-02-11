@@ -348,10 +348,10 @@ if st.session_state.temp_user_input:
     st.session_state.temp_user_input = ""
 
 with col_input:
-    st.text_input(
+    st.text_area(
         label="メッセージ入力",
         key=input_key,
-        placeholder="テキストを入力してEnter...",
+        placeholder="音声入力後に修正できます",
         label_visibility="collapsed",
         on_change=submit_text
     )
