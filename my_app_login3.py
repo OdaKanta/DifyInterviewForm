@@ -344,15 +344,19 @@ col_input, col_send, col_mic = st.columns([5, 1, 1])
 input_key = f"chat_input_text_{current_user}"
 display_value = st.session_state.temp_user_input
 
-if st.session_state.temp_user_input:
-    st.session_state[input_key] = st.session_state.temp_user_input
-    st.session_state.temp_user_input = ""
+# if st.session_state.temp_user_input:
+#     st.session_state[input_key] = st.session_state.temp_user_input
+#     st.session_state.input_method = "voice"
+#     st.session_state.temp_user_input = ""
+
+if display_value:
+    st.session_state.input_method = "voice"
 
 with col_input:
     st.text_input(
         label="メッセージ入力",
         value=display_value,
-        key=input_key
+        key=input_key,
         placeholder="テキストを入力してEnter...",
         label_visibility="collapsed",
         on_change=submit_text
@@ -385,6 +389,7 @@ if audio:
             if transcribed_text:
                 # miniモデルで高速校正
                 st.session_state.temp_user_input = correct_transcript(transcribed_text, target_keyword_path)
+                st.session_state.input_method = "voice"
                 st.rerun() # 文字が入った状態で即座に再描画
 
 # --- C. 送信処理（Enterが押された後の処理） ---
