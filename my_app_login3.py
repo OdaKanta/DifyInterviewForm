@@ -355,7 +355,7 @@ if audio:
             if transcribed_text:
                 corrected_text = correct_transcript(transcribed_text, target_keyword_path)
                 st.session_state.temp_user_input = corrected_text
-                st.session_state.input_to_process = corrected_text 
+                
                 # 前のボットの音声を停止
                 st.session_state.audio_html = None
 
