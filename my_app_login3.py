@@ -329,8 +329,8 @@ if st.session_state.is_completed:
 
 # 5. 入力エリア & 6. 入力処理ロジック（統合・順序修正版）
 def submit_text():
-    st.session_state.input_to_process = st.session_state[input_key]
-    st.session_state[input_key] = "" 
+    if st.session_state[input_key]:
+        st.session_state.input_to_process = st.session_state[input_key] 
 
 # セッション変数初期化（既存の場所に追加）
 if "input_method" not in st.session_state:
@@ -340,15 +340,16 @@ if "input_method" not in st.session_state:
 col_input, col_send, col_mic = st.columns([5, 1, 1])
 input_key = f"input_{st.session_state.conversation_id}"
 
-# 音声処理結果が届いていたら、即座に入力欄のセッション変数へ流し込む
+default_text = ""
 if st.session_state.temp_user_input:
-    st.session_state[input_key] = st.session_state.temp_user_input
-    st.session_state.temp_user_input = "" # リセット
-    st.session_state.input_method = "voice" # 音声入力としてマーク
+    default_text = st.session_state.temp_user_input
+    st.session_state.temp_user_input = "" # クリア
+    st.session_state.input_method = "voice"
 
 with col_input:
     st.text_input(
         label="メッセージ入力",
+        value=default_text,
         key=input_key,
         placeholder="テキストを入力してEnter...",
         label_visibility="collapsed",
@@ -359,7 +360,6 @@ with col_send:
     # 修正：temp_user_input ではなく input_key (現在の入力内容) を参照
     if st.button("送信", use_container_width=True):
         st.session_state.input_to_process = st.session_state[input_key]
-        st.session_state[input_key] = ""
         # rerunすると現在の入力方法(text or voice)を維持したまま送信処理へ進む
         st.rerun()
 
