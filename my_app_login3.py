@@ -329,8 +329,9 @@ if st.session_state.is_completed:
 
 # 5. 入力エリア & 6. 入力処理ロジック（統合・順序修正版）
 def submit_text():
-    st.session_state.input_to_process = st.session_state.temp_user_input
-    st.session_state.temp_user_input = "" 
+    if st.session_state.temp_user_input:
+        st.session_state.input_to_process = st.session_state.temp_user_input
+        st.session_state.temp_user_input = "" 
 
 # レイアウト定義（見た目は 左:入力、右:マイク）
 col_input, col_mic = st.columns([6, 1])
