@@ -145,10 +145,6 @@ def transcribe_audio(audio_bytes, keyword_file):
             unique_keywords = list(dict.fromkeys(all_keywords))
             vocab_prompt = ",".join(unique_keywords)
         
-        # デバッグログ（vocab_promptの中身を確認）
-        print(f"[DEBUG] Whisper Prompt: {vocab_prompt}")
-        st.write(f"[DEBUG] Whisper Prompt: {vocab_prompt}")
-        
         # 2. 音声認識の実行
         audio_file = io.BytesIO(audio_bytes)
         audio_file.name = "input.wav"
