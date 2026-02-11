@@ -329,12 +329,27 @@ if st.session_state.is_completed:
 
 # 5. 入力エリア & 6. 入力処理ロジック（統合・順序修正版）
 def submit_text():
-    if st.session_state.temp_user_input:
-        st.session_state.input_to_process = st.session_state.temp_user_input
-        st.session_state.temp_user_input = "" 
+    st.session_state.input_to_process = st.session_state.temp_user_input
+    st.session_state.temp_user_input = "" 
 
-# レイアウト定義（見た目は 左:入力、右:マイク）
-col_input, col_mic = st.columns([6, 1])
+# 送信用ボタンを含むレイアウト
+col_input, col_send, col_mic = st.columns([5, 1, 1])
+
+with col_input:
+    user_text = st.text_input(
+        label="メッセージ入力",
+        key="temp_user_input",
+        placeholder="テキストを入力してEnter...",
+        label_visibility="collapsed",
+        on_change=submit_text # 直接入力時のEnter用
+    )
+
+with col_send:
+    # 送信ボタン。クリックされたら input_to_process に値をセットして再実行
+    if st.button("送信"):
+        st.session_state.input_to_process = st.session_state.temp_user_input
+        st.session_state.temp_user_input = ""
+        st.rerun()
 
 # --- A. マイク入力と音声処理（先出し） ---
 with col_mic:
@@ -355,7 +370,6 @@ if audio:
             if transcribed_text:
                 corrected_text = correct_transcript(transcribed_text, target_keyword_path)
                 st.session_state.temp_user_input = corrected_text
-                
                 # 前のボットの音声を停止
                 st.session_state.audio_html = None
 
