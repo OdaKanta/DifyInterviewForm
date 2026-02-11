@@ -340,22 +340,18 @@ if "input_method" not in st.session_state:
 col_input, col_send, col_mic = st.columns([5, 1, 1])
 input_key = f"chat_input_text_{current_user}"
 
-display_value = ""
 if st.session_state.temp_user_input:
-    display_value = st.session_state.temp_user_input
-    st.session_state.input_method = "voice"
+    st.session_state[input_key] = st.session_state.temp_user_input
+    st.session_state.temp_user_input = ""
 
 with col_input:
     st.text_input(
         label="メッセージ入力",
-        value=display_value,
         key=input_key,
         placeholder="テキストを入力してEnter...",
         label_visibility="collapsed",
         on_change=submit_text
     )
-    if display_value:
-        st.session_state.temp_user_input = ""
 
 with col_send:
     # 修正：temp_user_input ではなく input_key (現在の入力内容) を参照
