@@ -346,6 +346,7 @@ input_key = f"chat_input_text_{current_user}"
 if st.session_state.temp_user_input:
     st.session_state[input_key] = st.session_state.temp_user_input
     st.session_state.temp_user_input = ""
+    
 
 with col_input:
     st.text_input(
@@ -392,6 +393,8 @@ if st.session_state.input_to_process:
     st.session_state.input_to_process = None
     st.session_state.audio_html = None
     st.session_state[input_key] = ""
+    st.session_state.temp_user_input = ""
+
 
 # 送信実行
 if final_prompt:
