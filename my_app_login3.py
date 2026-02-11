@@ -80,9 +80,9 @@ def upload_local_file_to_dify(file_path, user_id):
             st.error(f"内部アップロードエラー: {e}")
             return None
 
-def send_chat_message(query, conversation_id, file_id_to_send, user_id):
+def send_chat_message(query, conversation_id, file_id_to_send, user_id, material_name):
     url = f"{BASE_URL}/chat-messages"
-    inputs = {}
+    inputs = {"material_name": material_name}
     if file_id_to_send:
         inputs[FILE_VARIABLE_KEY] = {
             "type": "document", 
@@ -391,7 +391,8 @@ if final_prompt:
             query=final_prompt,
             conversation_id=st.session_state.conversation_id,
             file_id_to_send=st.session_state.current_file_id,
-            user_id=current_user
+            user_id=current_user,
+            material_name=st.session_state.selected_material
         )
         
         if response:
