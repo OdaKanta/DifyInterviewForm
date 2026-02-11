@@ -42,9 +42,9 @@ def login():
             st.write("学習を開始するにはログインしてください")
             
             # ユーザーID入力
-            username_input = st.text_input("ユーザーID")
+            username_input = st.text_input("ユーザーID", key="login_user_id")
             # パスワード入力（type="password"で文字を隠す）
-            password_input = st.text_input("パスワード", type="password")
+            password_input = st.text_input("パスワード", type="password", key="login_password")
             
             submitted = st.form_submit_button("ログイン")
             
@@ -329,16 +329,16 @@ if st.session_state.is_completed:
 
 # 5. 入力エリア & 6. 入力処理ロジック（統合・順序修正版）
 def submit_text():
-    st.session_state.input_to_process = st.session_state.temp_user_input
+    st.session_state.input_to_process = st.session_state[input_key]
     st.session_state.temp_user_input = "" 
 
 # 送信用ボタンを含むレイアウト
 col_input, col_send, col_mic = st.columns([5, 1, 1])
-
+input_key = f"input_{st.session_state.conversation_id}"
 with col_input:
     user_text = st.text_input(
         label="メッセージ入力",
-        key="temp_user_input",
+        key=input_key,
         placeholder="テキストを入力してEnter...",
         label_visibility="collapsed",
         on_change=submit_text # 直接入力時のEnter用
