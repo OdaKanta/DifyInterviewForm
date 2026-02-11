@@ -199,7 +199,7 @@ def correct_transcript(text, keyword_file):
         {f"■ 授業内容に含まれる重要語句（この単語への誤変換が疑われる場合に参考にせよ）: {keywords_str}" if keywords_str else ""}
         """
         response = openai_client.chat.completions.create(
-            model="gpt-4o", # 高速・安価なモデル
+            model="gpt-4o-mini", # 高速・安価なモデル
             messages=[
                 {"role": "system", "content": "あなたは優秀な校正者です。音声書き起こしにみられる誤字脱字などを修正してください。"},
                 {"role": "user", "content": prompt}
@@ -332,28 +332,35 @@ def submit_text():
     st.session_state.input_to_process = st.session_state[input_key]
     st.session_state[input_key] = "" 
 
-# 送信用ボタンを含むレイアウト
+# セッション変数初期化（既存の場所に追加）
+if "input_method" not in st.session_state:
+    st.session_state.input_method = "text"
+
+# --- 5. 入力エリア ---
 col_input, col_send, col_mic = st.columns([5, 1, 1])
 input_key = f"input_{st.session_state.conversation_id}"
+
+# 音声処理結果が届いていたら、即座に入力欄のセッション変数へ流し込む
+if st.session_state.temp_user_input:
+    st.session_state[input_key] = st.session_state.temp_user_input
+    st.session_state.temp_user_input = "" # リセット
+    st.session_state.input_method = "voice" # 音声入力としてマーク
+
 with col_input:
-    # 音声認識結果がある場合は、セッション状態にセットしておく
-    if st.session_state.temp_user_input:
-        st.session_state[input_key] = st.session_state.temp_user_input
-        st.session_state.temp_user_input = "" # 消費したらクリア
-    
-    user_text = st.text_input(
+    st.text_input(
         label="メッセージ入力",
         key=input_key,
         placeholder="テキストを入力してEnter...",
         label_visibility="collapsed",
-        on_change=submit_text # 直接入力時のEnter用
+        on_change=submit_text
     )
 
 with col_send:
-    # 送信ボタン。クリックされたら input_to_process に値をセットして再実行
-    if st.button("送信"):
-        st.session_state.input_to_process = st.session_state.temp_user_input
-        st.session_state.temp_user_input = ""
+    # 修正：temp_user_input ではなく input_key (現在の入力内容) を参照
+    if st.button("送信", use_container_width=True):
+        st.session_state.input_to_process = st.session_state[input_key]
+        st.session_state[input_key] = ""
+        # rerunすると現在の入力方法(text or voice)を維持したまま送信処理へ進む
         st.rerun()
 
 # --- A. マイク入力と音声処理（先出し） ---
@@ -369,14 +376,12 @@ with col_mic:
 if audio:
     if audio['bytes'] != st.session_state.prev_audio_bytes:
         st.session_state.prev_audio_bytes = audio['bytes']
-        
-        with st.spinner("音声認識中..."):
+        with st.spinner("音声処理中..."): # 文言を短く
             transcribed_text = transcribe_audio(audio['bytes'], target_keyword_path)
             if transcribed_text:
-                corrected_text = correct_transcript(transcribed_text, target_keyword_path)
-                st.session_state.temp_user_input = corrected_text
-                # 前のボットの音声を停止
-                st.session_state.audio_html = None
+                # miniモデルで高速校正
+                st.session_state.temp_user_input = correct_transcript(transcribed_text, target_keyword_path)
+                st.rerun() # 文字が入った状態で即座に再描画
 
 # --- C. 送信処理（Enterが押された後の処理） ---
 # コールバック(submit_text)によって input_to_process に値が入っていたら実行
