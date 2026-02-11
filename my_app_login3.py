@@ -257,6 +257,8 @@ if "input_to_process" not in st.session_state:
     st.session_state.input_to_process = None
 if "is_completed" not in st.session_state:
     st.session_state.is_completed = False
+if "clear_input" not in st.session_state:
+    st.session_state.clear_input = False
 
 # 1. 講義資料の選択インターフェース
 if not st.session_state.selected_material:
@@ -349,6 +351,11 @@ if st.session_state.temp_user_input:
     
 
 with col_input:
+    # 入力クリア処理（安全版）
+    if st.session_state.clear_input:
+        st.session_state[input_key] = ""
+        st.session_state.temp_user_input = ""
+        st.session_state.clear_input = False
     st.text_input(
         label="メッセージ入力",
         key=input_key,
@@ -392,8 +399,7 @@ if st.session_state.input_to_process:
     final_prompt = st.session_state.input_to_process
     st.session_state.input_to_process = None
     st.session_state.audio_html = None
-    st.session_state[input_key] = ""
-    st.session_state.temp_user_input = ""
+    st.session_state.clear_input = True
 
 
 # 送信実行
