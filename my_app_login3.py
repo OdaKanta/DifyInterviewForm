@@ -342,6 +342,7 @@ if "input_method" not in st.session_state:
 # --- 5. 入力エリア ---
 col_input, col_send, col_mic = st.columns([5, 1, 1])
 input_key = f"chat_input_text_{current_user}"
+display_value = st.session_state.temp_user_input
 
 if st.session_state.temp_user_input:
     st.session_state[input_key] = st.session_state.temp_user_input
@@ -350,11 +351,14 @@ if st.session_state.temp_user_input:
 with col_input:
     st.text_input(
         label="メッセージ入力",
-        key=input_key,
+        value=display_value,
+        key=input_key
         placeholder="テキストを入力してEnter...",
         label_visibility="collapsed",
         on_change=submit_text
     )
+if display_value:
+    st.session_state.temp_user_input = ""
 
 with col_send:
     # 修正：temp_user_input ではなく input_key (現在の入力内容) を参照
@@ -427,6 +431,6 @@ if final_prompt:
             
             st.session_state.last_bot_message = answer_text
             st.session_state.audio_html = text_to_speech_autoplay(answer_text)
-            st.session_state[input_key] = ""
+            st.session_state.temp_user_input = ""
 
             st.rerun()
